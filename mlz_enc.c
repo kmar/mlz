@@ -98,12 +98,12 @@ typedef struct {
 static mlz_bool mlz_flush_accum(mlz_accumulator *accum, mlz_byte **db, MLZ_CONST mlz_byte *de)
 {
 	int i;
-	MLZ_RET_FALSE( *db + MLZ_ACCUM_BYTES <= de );
+	MLZ_RET_FALSE(*db + MLZ_ACCUM_BYTES <= de);
 
-	if ( !accum->count )
+	if (!accum->count)
 		return MLZ_TRUE;
 
-	for ( i=0; i<MLZ_ACCUM_BYTES; i++) {
+	for (i=0; i<MLZ_ACCUM_BYTES; i++) {
 		accum->ptr[i] = (mlz_byte)((accum->bits >> 8*i) & 255);
 	}
 	accum->ptr = *db;
@@ -130,11 +130,11 @@ MLZ_INLINE mlz_int mlz_compute_savings(mlz_int dist, mlz_int len)
 	mlz_int  bit_cost = 0;
 	mlz_bool tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << 3);
 
-	if ( tiny_len && dist <= 256 ) {
+	if (tiny_len && dist <= 256) {
 		bit_cost = 3 + 3 + 8;
-	} else if ( tiny_len && dist < (1 << 13) ) {
+	} else if (tiny_len && dist < (1 << 13)) {
 		bit_cost = 3 + 3 + 16;
-	} else if ( tiny_len ) {
+	} else if (tiny_len) {
 		bit_cost = 3 + 3 + 16;
 	} else {
 		bit_cost = 3 + 8 + 16 + 16*(len >= 255);
@@ -334,7 +334,7 @@ static mlz_bool mlz_output_match(
 	/* 3 bits + two words => 32 + 3 = 35 bits static cost + 8*lit => minimum literal run is 36 */
 	/* normally single literal costs 9 bits                                                    */
 	/* so we only do this for 36+ literals                                                     */
-	while (nlit >= MLZ_MIN_LIT_RUN ) {
+	while (nlit >= MLZ_MIN_LIT_RUN) {
 		mlz_int run = mlz_min(65535, nlit);
 		MLZ_RET_FALSE(mlz_output_match(accum, MLZ_NULL, MLZ_NULL, db, de, 0, MLZ_MIN_MATCH));
 
@@ -351,12 +351,12 @@ static mlz_bool mlz_output_match(
 	}
 
 	/* encode literals */
-	while ( lb < le ) {
-		MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 0 ));
+	while (lb < le) {
+		MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 0));
 		MLZ_RET_FALSE(*db < de);
 		*(*db)++ = *lb++;
 	}
-	if ( len < 2 ) {
+	if (len < MLZ_MIN_MATCH) {
 		MLZ_ASSERT(!len);
 		return MLZ_TRUE;
 	}
@@ -419,7 +419,7 @@ static mlz_bool mlz_output_match(
 		return MLZ_TRUE;
 	}
 
-	if ( len <= 3 ) {
+	if (len <= 3) {
 		/* cost optimization: encode match as literals */
 		for (i=0; i<len; i++) {
 			MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 0));
@@ -514,8 +514,8 @@ mlz_compress(
 		MLZ_CONST mlz_byte *firstsb;
 		mlz_int best_savings = -1;
 		mlz_int best_len = 0;
-		mlz_int max_dist = mlz_min(MLZ_MAX_DIST,  (mlz_int)(sb - osb) );
-		mlz_int max_len  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se - sb) );
+		mlz_int max_dist = mlz_min(MLZ_MAX_DIST,  (mlz_int)(sb - osb));
+		mlz_int max_len  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se - sb));
 
 		/* compute hash at sb */
 		MLZ_HASHBYTE(sb);
@@ -565,7 +565,7 @@ mlz_compress(
 			lmax_len = mlz_min(lmax_len, MLZ_MIN_MATCH);
 			ldist = mlz_match(matcher, (mlz_int)(lazysb - osb), hash, osb, lmax_dist, lmax_len,
 				&lbestLen, MLZ_NULL, loops);
-			if ( !ldist || lbestLen < MLZ_MIN_MATCH)
+			if (!ldist || lbestLen < MLZ_MIN_MATCH)
 				break;
 
 			MLZ_HASHBYTE(sb2);
@@ -575,7 +575,7 @@ mlz_compress(
 			best_dist2 = sb2 > match_start_max ? 0 :
 				mlz_match(matcher, (mlz_int)(sb2 - osb), hash, osb, max_dist2, max_len2, &best_len2,
 					level >=10 ? &best_savings : MLZ_NULL, loops);
-			if ( !best_dist2 || best_len2 <= best_len )
+			if (!best_dist2 || best_len2 <= best_len)
 				break;
 
 			MLZ_ASSERT(lazy_ofs == 1);
@@ -597,7 +597,7 @@ mlz_compress(
 		}
 
 		MLZ_RET_FALSE(mlz_output_match(&accum, lit_start, sb, &db, de, best_dist, best_len));
-		for ( i=0; i<best_len; i++ ) {
+		for (i=0; i<best_len; i++) {
 			MLZ_HASHBYTE(sb);
 			mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
 			sb++;
@@ -608,7 +608,7 @@ mlz_compress(
 #undef MLZ_HASHBYTE
 
 	/* flush last lit chunk */
-	if ( lit_start < sb && !mlz_output_match(&accum, lit_start, sb, &db, de, 0, 0))
+	if (lit_start < sb && !mlz_output_match(&accum, lit_start, sb, &db, de, 0, 0))
 		return 0;
 
 	MLZ_RET_FALSE(mlz_flush_accum(&accum, &db, de));

@@ -74,7 +74,7 @@ mlz_adler32(
 	while (size >= 5552) {
 		/* fast path */
 		mlz_uint i;
-		for ( i=5552/4; i>0; i--) {
+		for (i=5552/4; i>0; i--) {
 			lo += *b++;
 			hi += lo;
 			lo += *b++;
@@ -230,7 +230,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		MLZ_RET_FALSE(mlz_read_little_endian(stream, &block_checksum));
 	}
 
-	if ( partial )
+	if (partial)
 		MLZ_RET_FALSE(mlz_read_little_endian(stream, &usize) &&
 			usize > 0 && usize <= (mlz_uint)stream->block_size);
 
@@ -239,7 +239,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 	target_pos &= ~(mlz_uintptr)7;
 
 	target = stream->buffer + target_pos;
-	if ( uncompressed )
+	if (uncompressed)
 		/* special handling of uncompressed blocks */
 		target = stream->buffer + stream->context_size;
 
@@ -252,7 +252,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 
 	stream->ptr = stream->buffer + stream->context_size;
 
-	if ( !uncompressed ) {
+	if (!uncompressed) {
 		/* and finally: decompress (in-place) */
 		size_t dlen = mlz_decompress(stream->buffer + stream->context_size, usize, target,
 			blk_size, stream->block_size * (stream->first_block != MLZ_TRUE));
