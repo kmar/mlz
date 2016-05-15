@@ -66,10 +66,9 @@ mlz_adler32_simple(
 	size_t size
 );
 
-/* returns MLZ_TRUE on success */
-MLZ_API mlz_bool
+/* returns new stream or MLZ_NULL on failure */
+MLZ_API mlz_in_stream *
 mlz_in_stream_open(
-	mlz_in_stream              **stream,
 	MLZ_CONST mlz_stream_params *params
 );
 
@@ -79,6 +78,12 @@ mlz_stream_read(
 	mlz_in_stream *stream,
 	void          *buf,
 	mlz_intptr     size
+);
+
+/* returns MLZ_TRUE on success */
+MLZ_API mlz_bool
+mlz_in_stream_rewind(
+	mlz_in_stream *stream
 );
 
 /* returns MLZ_TRUE on success */

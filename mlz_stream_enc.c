@@ -32,9 +32,8 @@
 #include "mlz_enc.h"
 #include <string.h>
 
-mlz_bool
+mlz_out_stream *
 mlz_out_stream_open(
-	mlz_out_stream             **stream,
 	MLZ_CONST mlz_stream_params *params,
 	mlz_int                      level
 )
@@ -43,7 +42,7 @@ mlz_out_stream_open(
 	mlz_out_stream *outs;
 	mlz_int         context_size;
 
-	MLZ_RET_FALSE(stream && params);
+	MLZ_RET_FALSE(params);
 	/* block size test */
 	MLZ_RET_FALSE(params->block_size >= MLZ_MIN_BLOCK_SIZE && params->block_size < MLZ_MAX_BLOCK_SIZE);
 	/* power of two test */
@@ -51,8 +50,8 @@ mlz_out_stream_open(
 	/* write function test */
 	MLZ_RET_FALSE(params->write_func);
 
-	*stream = (mlz_out_stream *)mlz_malloc(sizeof(mlz_out_stream));
-	MLZ_RET_FALSE(*stream);
+	outs = (mlz_out_stream *)mlz_malloc(sizeof(mlz_out_stream));
+	MLZ_RET_FALSE(outs);
 
 	context_size = MLZ_BLOCK_CONTEXT_SIZE;
 	if (params->block_size < context_size)
@@ -61,15 +60,12 @@ mlz_out_stream_open(
 	if (params->independent_blocks)
 		context_size = 0;
 
-	(*stream)->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size*2);
+	outs->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size*2);
 	if (!buf) {
 	out_stream_error:
-		mlz_free(*stream);
-		*stream = MLZ_NULL;
-		return MLZ_FALSE;
+		mlz_free(outs);
+		return MLZ_NULL;
 	}
-
-	outs = *stream;
 
 	if (!mlz_matcher_init(&outs->matcher)) {
 		mlz_free(buf);
@@ -84,7 +80,7 @@ mlz_out_stream_open(
 	outs->first_block  = MLZ_TRUE;
 	outs->params       = *params;
 
-	return MLZ_TRUE;
+	return outs;
 }
 
 static mlz_bool mlz_write_little_endian(mlz_out_stream *stream, mlz_uint val)

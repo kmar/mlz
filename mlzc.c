@@ -190,7 +190,8 @@ static int process(void)
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
 
-		if (!mlz_out_stream_open(&outs, &par, level)) {
+		outs = mlz_out_stream_open(&par, level);
+		if (!outs) {
 			fclose(fin);
 			if (fout)
 				fclose(fout);
@@ -226,7 +227,8 @@ static int process(void)
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
 
-		if (!mlz_in_stream_open(&ins, &par)) {
+		ins = mlz_in_stream_open(&par);
+		if (!ins) {
 			fclose(fin);
 			if (fout)
 				fclose(fout);

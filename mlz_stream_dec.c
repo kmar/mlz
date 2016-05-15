@@ -47,7 +47,12 @@ static mlz_intptr mlz_stream_write_wrapper(void *handle, MLZ_CONST void *buf, ml
 	return ferror((FILE *)handle) ? -1 : (mlz_intptr)res;
 }
 
-mlz_bool mlz_stream_close_wrapper(void *handle)
+static mlz_bool mlz_stream_rewind_wrapper(void *handle)
+{
+	return fseek((FILE *)handle, 0, SEEK_SET) == 0;
+}
+
+static mlz_bool mlz_stream_close_wrapper(void *handle)
 {
 	return fclose((FILE *)handle) == 0;
 }
@@ -121,6 +126,7 @@ MLZ_CONST mlz_stream_params mlz_default_stream_params = {
 	MLZ_NULL,
 	mlz_stream_read_wrapper,
 	mlz_stream_write_wrapper,
+	mlz_stream_rewind_wrapper,
 	mlz_stream_close_wrapper,
 	MLZ_NULL,
 	/* compressed block checksum function, returns 32-bit hash */
@@ -135,9 +141,8 @@ MLZ_CONST mlz_stream_params mlz_default_stream_params = {
 	MLZ_FALSE
 };
 
-mlz_bool
+mlz_in_stream *
 mlz_in_stream_open(
-	mlz_in_stream              **stream,
 	MLZ_CONST mlz_stream_params *params
 )
 {
@@ -145,7 +150,7 @@ mlz_in_stream_open(
 	mlz_in_stream  *ins;
 	mlz_int         context_size;
 
-	MLZ_RET_FALSE(stream && params);
+	MLZ_RET_FALSE(params);
 	/* block size test */
 	MLZ_RET_FALSE(params->block_size >= MLZ_MIN_BLOCK_SIZE && params->block_size < MLZ_MAX_BLOCK_SIZE);
 	/* power of two test */
@@ -153,8 +158,8 @@ mlz_in_stream_open(
 	/* read function test */
 	MLZ_RET_FALSE(params->read_func);
 
-	*stream = (mlz_in_stream *)mlz_malloc(sizeof(mlz_in_stream));
-	MLZ_RET_FALSE(*stream);
+	ins = (mlz_in_stream *)mlz_malloc(sizeof(mlz_in_stream));
+	MLZ_RET_FALSE(ins);
 
 	context_size = MLZ_BLOCK_CONTEXT_SIZE;
 	if (context_size < params->block_size)
@@ -163,14 +168,12 @@ mlz_in_stream_open(
 	if (params->independent_blocks)
 		context_size = 0;
 
-	(*stream)->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size + MLZ_BLOCK_DEC_RESERVE);
+	ins->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size + MLZ_BLOCK_DEC_RESERVE);
 	if (!buf) {
-		mlz_free(*stream);
-		*stream = MLZ_NULL;
-		return MLZ_FALSE;
+		mlz_free(ins);
+		return MLZ_NULL;
 	}
 
-	ins               = *stream;
 	ins->params       = *params;
 	ins->block_size   = params->block_size;
 	ins->context_size = context_size;
@@ -178,7 +181,7 @@ mlz_in_stream_open(
 	ins->top          = MLZ_NULL;
 	ins->is_eof       = MLZ_FALSE;
 	ins->first_block  = MLZ_TRUE;
-	return MLZ_TRUE;
+	return ins;
 }
 
 static mlz_bool mlz_read_little_endian(mlz_in_stream *stream, mlz_uint *val)
@@ -312,6 +315,21 @@ mlz_stream_read(
 	}
 
 	return nread;
+}
+
+mlz_bool
+mlz_in_stream_rewind(
+	mlz_in_stream *stream
+)
+{
+	MLZ_RET_FALSE(stream && stream->params.rewind_func);
+	MLZ_RET_FALSE(stream->params.rewind_func(stream->params.handle));
+
+	stream->ptr         = MLZ_NULL;
+	stream->top         = MLZ_NULL;
+	stream->is_eof      = MLZ_FALSE;
+	stream->first_block = MLZ_TRUE;
+	return MLZ_TRUE;
 }
 
 mlz_bool

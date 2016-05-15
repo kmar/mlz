@@ -1,4 +1,4 @@
-mini-LZ library (mlz) v0.1
+mini-LZ library (mlz) v0.1a
 Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C

@@ -56,10 +56,9 @@ typedef struct
 } mlz_out_stream;
 
 /* level = compression level, 0 = fastest, 10 = best */
-/* returns MLZ_TRUE on success */
-MLZ_API mlz_bool
+/* returns new stream or MLZ_NULL on failure */
+MLZ_API mlz_out_stream *
 mlz_out_stream_open(
-	mlz_out_stream             **stream,
 	MLZ_CONST mlz_stream_params *params,
 	mlz_int                      level
 );

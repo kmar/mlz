@@ -45,6 +45,8 @@ typedef struct {
 	mlz_intptr (*read_func)(void *handle, void *buf, mlz_intptr size);
 	/* low level write function, returns -1 on error, otherwise number of bytes written */
 	mlz_intptr (*write_func)(void *handle, MLZ_CONST void *buf, mlz_intptr size);
+	/* optional rewind callback, in stream only */
+	mlz_bool   (*rewind_func)(void *handle);
 	/* optional low level close function, returns MLZ_TRUE on success   */
 	mlz_bool   (*close_func)(void *handle);
 	/* optional block callback, out stream only, called before new block is written */
