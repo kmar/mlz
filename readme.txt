@@ -1,8 +1,9 @@
-mini-LZ library (mlz) v0.1a
-Martin Sedlak 2016
+mini-LZ library (mlz) v0.1b
+(c) Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C
-distributed under Unlicense (=public domain)
+distributed under Boost software license
+(this means you don't have to include the license with binary distributions)
 
 performance on Silesia corpus (single ~207MB block):
 compression (max level): 4-5MB/sec (thus very slow)
