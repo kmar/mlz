@@ -44,10 +44,13 @@ typedef struct
 	MLZ_CONST mlz_byte  *ptr;
 	MLZ_CONST mlz_byte  *top;
 	mlz_stream_params    params;
+	mlz_uint             checksum;
 	mlz_int              block_size;
 	mlz_int              context_size;
 	mlz_bool             is_eof;
 	mlz_bool             first_block;
+	/* first block cached? allows fast rewind early */
+	mlz_bool             first_cached;
 } mlz_in_stream;
 
 /* simple adler32 checksum (Mark Adler's Fletcher variant) */

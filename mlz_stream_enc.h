@@ -47,6 +47,7 @@ typedef struct
 	/* points into buffer */
 	mlz_byte            *out_buffer;
 	mlz_stream_params    params;
+	mlz_uint             checksum;
 	mlz_int              ptr;
 	mlz_int              block_size;
 	mlz_int              context_size;

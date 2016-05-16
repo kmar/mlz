@@ -174,12 +174,14 @@ mlz_in_stream_open(
 	}
 
 	ins->params       = *params;
+	ins->checksum     = params->initial_checksum;
 	ins->block_size   = params->block_size;
 	ins->context_size = context_size;
 	ins->ptr          = MLZ_NULL;
 	ins->top          = MLZ_NULL;
 	ins->is_eof       = MLZ_FALSE;
 	ins->first_block  = MLZ_TRUE;
+	ins->first_cached = MLZ_FALSE;
 	return ins;
 }
 
@@ -215,7 +217,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		if (stream->params.incremental_checksum) {
 			mlz_uint checksum;
 			MLZ_RET_FALSE(mlz_read_little_endian(stream, &checksum) &&
-				checksum == stream->params.initial_checksum);
+				checksum == stream->checksum);
 		}
 		stream->ptr = stream->top = MLZ_NULL;
 		stream->is_eof = MLZ_TRUE;
@@ -260,9 +262,9 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 
 	/* compute incremental checksum if needed */
 	if (stream->params.incremental_checksum)
-		stream->params.initial_checksum =
+		stream->checksum =
 			stream->params.incremental_checksum(stream->buffer + stream->context_size,
-				usize, stream->params.initial_checksum);
+				usize, stream->checksum);
 
 	stream->top = stream->ptr + usize;
 
@@ -270,7 +272,8 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 	if (stream->context_size > 0 && usize >= (size_t)stream->context_size)
 		memcpy(stream->buffer, stream->buffer + usize, stream->context_size);
 
-	stream->first_block = MLZ_FALSE;
+	stream->first_cached = stream->first_block;
+	stream->first_block  = MLZ_FALSE;
 
 	return MLZ_TRUE;
 }
@@ -321,13 +324,22 @@ mlz_in_stream_rewind(
 	mlz_in_stream *stream
 )
 {
-	MLZ_RET_FALSE(stream && stream->params.rewind_func);
-	MLZ_RET_FALSE(stream->params.rewind_func(stream->params.handle));
+	MLZ_RET_FALSE(stream);
 
-	stream->ptr         = MLZ_NULL;
-	stream->top         = MLZ_NULL;
-	stream->is_eof      = MLZ_FALSE;
-	stream->first_block = MLZ_TRUE;
+	if (stream->first_cached) {
+		/* fast rewind */
+		stream->ptr = stream->buffer + stream->context_size;
+		return MLZ_TRUE;
+	}
+
+	MLZ_RET_FALSE(stream->params.rewind_func && stream->params.rewind_func(stream->params.handle));
+
+	stream->ptr          = MLZ_NULL;
+	stream->top          = MLZ_NULL;
+	stream->checksum     = stream->params.initial_checksum;
+	stream->is_eof       = MLZ_FALSE;
+	stream->first_block  = MLZ_TRUE;
+	stream->first_cached = MLZ_FALSE;
 	return MLZ_TRUE;
 }
 

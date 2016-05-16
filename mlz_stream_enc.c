@@ -74,6 +74,7 @@ mlz_out_stream_open(
 	outs->block_size   = params->block_size;
 	outs->context_size = context_size;
 	outs->out_buffer   = buf + context_size + params->block_size;
+	outs->checksum     = params->initial_checksum;
 	outs->ptr          = 0;
 	outs->level        = level < 0 ? 0 : (level > MLZ_LEVEL_MAX ? MLZ_LEVEL_MAX : level);
 	outs->first_block  = MLZ_TRUE;
@@ -156,9 +157,9 @@ static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 
 	/* update incremental checksum if needed */
 	if (stream->params.incremental_checksum) {
-		stream->params.initial_checksum =
+		stream->checksum =
 			stream->params.incremental_checksum(stream->buffer + stream->context_size,
-				stream->ptr, stream->params.initial_checksum);
+				stream->ptr, stream->checksum);
 	}
 
 	/* copy block context unless last block */
@@ -184,7 +185,7 @@ mlz_out_stream_close(
 
 	/* write final checksum if needed */
 	if (stream->params.incremental_checksum)
-		MLZ_RET_FALSE(mlz_write_little_endian(stream, stream->params.initial_checksum));
+		MLZ_RET_FALSE(mlz_write_little_endian(stream, stream->checksum));
 
 	if (stream->params.close_func)
 		MLZ_RET_FALSE(stream->params.close_func(stream->params.handle));
