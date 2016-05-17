@@ -232,8 +232,7 @@ int mlz_decompress_mini(
 			if (type == 0) {
 				/* tiny match */
 				MLZ_GET_SHORT_LEN_FAST_NOACCUM(len)
-				len += MLZ_MIN_MATCH;
-				dist = *sb++ + 1;
+				MLZ_TINY_MATCH()
 			} else if (type == 2) {
 				/* short match */
 				MLZ_SHORT_MATCH()
