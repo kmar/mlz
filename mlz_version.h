@@ -28,5 +28,5 @@
 */
 
 #ifndef MLZ_VERSION
-#	define MLZ_VERSION "0.1b"
+#	define MLZ_VERSION "0.1c"
 #endif

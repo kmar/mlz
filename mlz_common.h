@@ -133,8 +133,8 @@ typedef enum {
 	MLZ_MIN_MATCH   = 3,
 	MLZ_MAX_MATCH   = 65535,
 	MLZ_MIN_LIT_RUN = 36,
-	MLZ_ACCUM_BITS  = 24,
-	MLZ_ACCUM_BYTES = 3
+	MLZ_ACCUM_BITS  = 16,
+	MLZ_ACCUM_BYTES = MLZ_ACCUM_BITS/8
 } mlz_constants;
 
 #endif

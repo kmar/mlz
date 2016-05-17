@@ -234,7 +234,6 @@ int mlz_decompress_mini(
 				MLZ_GET_SHORT_LEN_FAST_NOACCUM(len)
 				len += MLZ_MIN_MATCH;
 				dist = *sb++ + 1;
-				goto copy_match_tiny_unsafe_0;
 			} else if (type == 2) {
 				/* short match */
 				MLZ_SHORT_MATCH()
@@ -251,7 +250,6 @@ int mlz_decompress_mini(
 				MLZ_LITERAL_RUN_UNSAFE()
 				continue;
 			}
-		copy_match_tiny_unsafe_0:
 			/* copy match */
 			MLZ_COPY_MATCH_UNSAFE()
 			continue;
@@ -266,7 +264,6 @@ int mlz_decompress_mini(
 			/* tiny match */
 			MLZ_GET_SHORT_LEN_FAST(len)
 			MLZ_TINY_MATCH()
-			goto copy_match_tiny_unsafe_1;
 		} else if (type == 2) {
 			/* short match */
 			MLZ_SHORT_MATCH()
@@ -283,7 +280,6 @@ int mlz_decompress_mini(
 			MLZ_LITERAL_RUN_UNSAFE()
 			continue;
 		}
-		copy_match_tiny_unsafe_1:
 		/* copy match */
 		MLZ_COPY_MATCH_UNSAFE()
 	}
