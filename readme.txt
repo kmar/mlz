@@ -1,4 +1,4 @@
-mini-LZ library (mlz) v0.1c
+mini-LZ library (mlz) v0.1d
 (c) Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C
@@ -7,8 +7,7 @@ distributed under Boost software license
 
 performance on Silesia corpus (single ~207MB block) on my i7:
 compression (max level): 4-5MB/sec (thus very slow)
-decompression: ~500MB/sec (heavily depends on compiler optimizer) (reasonably fast)
-    (some compilers even reach 600MB/sec now)
+decompression: ~400-500MB/sec (heavily depends on compiler optimizer) (reasonably fast)
 compressed size: ~71MB (worse than zlib but still relatively good)
 
 (note: assuming MB = 1024^2 bytes)
@@ -55,6 +54,6 @@ algorithm: plain lz77 with deep lazy matching
 64kb "sliding dictionary", handling extreme cases
 (long literal runs and extremely well compressed data)
 matcher is simple hash-list (hash-chain)
-data format is described in source files (using 16-bit bit accumulator)
+data format is described in source files (using 24-bit bit accumulator)
 
 have fun
