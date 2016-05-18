@@ -57,6 +57,7 @@ static mlz_bool independent     = MLZ_FALSE;
 /* use compressed block checksum */
 static mlz_bool block_checksum  = MLZ_FALSE;
 static mlz_bool show_ver        = MLZ_FALSE;
+static mlz_bool unsafe          = MLZ_FALSE;
 static mlz_int  block_size      = 65536;
 
 static char buffer[65536];
@@ -86,6 +87,8 @@ static int parse_args(int argc, char **argv)
 			level = MLZ_LEVEL_MAX;
 		} else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
 			show_ver = MLZ_TRUE;
+		} else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--unsafe") == 0) {
+			unsafe = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compress") == 0) {
 			compress = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--decompress") == 0) {
@@ -142,6 +145,7 @@ static void help(void)
 	printf("       -b or --block <n> set block size in kb, default is 64\n");
 	printf("       -bc or --block-checksum include compressed block checksum\n");
 	printf("       -v or --version   show library version\n");
+	printf("       -u or --unsafe    unsafe decompression\n");
 	printf("       -i or --independent use independent blocks\n");
 	printf("           when using independent blocks, it's recommended\n");
 	printf("           to use block size of 128k or more\n");
@@ -218,11 +222,13 @@ static int process(void)
 			return 8;
 		}
 	} else {
+		/* decompress */
 		mlz_in_stream    *ins;
 		mlz_stream_params par  = mlz_default_stream_params;
 		par.handle             = fin;
 		par.independent_blocks = independent;
 		par.block_size         = block_size;
+		par.unsafe = unsafe;
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
 

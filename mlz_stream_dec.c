@@ -137,6 +137,8 @@ MLZ_CONST mlz_stream_params mlz_default_stream_params = {
 	/* desired block size, 65536 is recommended */
 	65536,
 	/* independent blocks flag */
+	MLZ_FALSE,
+	/* unsafe flag */
 	MLZ_FALSE
 };
 
@@ -214,7 +216,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 	MLZ_RET_FALSE(blk_size <= (mlz_uint)stream->block_size);
 
 	if (blk_size == 0) {
-		if (stream->params.incremental_checksum) {
+		if (!stream->params.unsafe && stream->params.incremental_checksum) {
 			mlz_uint checksum;
 			MLZ_RET_FALSE(mlz_read_little_endian(stream, &checksum) &&
 				checksum == stream->checksum);
@@ -248,15 +250,18 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		(mlz_intptr)blk_size) == (mlz_intptr)blk_size);
 
 	/* validate compressed checksum */
-	if (stream->params.block_checksum)
+	if (!stream->params.unsafe && stream->params.block_checksum)
 		MLZ_RET_FALSE(stream->params.block_checksum(target, blk_size) == block_checksum);
 
 	stream->ptr = stream->buffer + stream->context_size;
 
 	if (!uncompressed) {
 		/* and finally: decompress (in-place) */
-		size_t dlen = mlz_decompress(stream->buffer + stream->context_size, usize, target,
-			blk_size, stream->block_size * (stream->first_block != MLZ_TRUE));
+		size_t dlen = stream->params.unsafe ?
+			mlz_decompress_unsafe(stream->buffer + stream->context_size, target,
+			blk_size)
+			: mlz_decompress(stream->buffer + stream->context_size, usize, target,
+				blk_size, stream->block_size * (stream->first_block != MLZ_TRUE));
 		MLZ_RET_FALSE(dlen == (size_t)usize);
 	}
 

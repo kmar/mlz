@@ -67,6 +67,8 @@ typedef struct {
 	/* set to MLZ_TRUE to use independent blocks        */
 	/* hurts ratio but improves compression speed a lot */
 	mlz_bool     independent_blocks;
+	/* unsafe: no bounds check, skip checksum (if any)  */
+	mlz_bool     unsafe;
 } mlz_stream_params;
 
 /* default params wrapped around stdio, just copy and assign handle */

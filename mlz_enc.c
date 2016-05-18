@@ -39,7 +39,10 @@ enum mlz_match_constants
 	MLZ_HASH_SIZE      = 2048,
 	MLZ_HASH_LIST_SIZE = 65536,
 	MLZ_DICT_MASK      = MLZ_HASH_LIST_SIZE-1,
-	MLZ_HASH_MASK      = MLZ_HASH_SIZE-1
+	MLZ_HASH_MASK      = MLZ_HASH_SIZE-1,
+
+	/* 3 tested best */
+	MLZ_SHORT_LEN_BITS = 3
 };
 
 MLZ_INLINE void *mlz_malloc_wrapper(size_t size)
@@ -127,7 +130,7 @@ MLZ_INLINE mlz_int mlz_compute_savings(mlz_int dist, mlz_int len)
 {
 	/* compute cost now */
 	mlz_int  bit_cost = 0;
-	mlz_bool tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << 3);
+	mlz_bool tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << MLZ_SHORT_LEN_BITS);
 
 	if (tiny_len && dist <= 256) {
 		bit_cost = 3 + 3 + 8;
@@ -322,9 +325,6 @@ static mlz_bool mlz_output_match(
 	mlz_int i, j, nlit, dlen;
 	mlz_bool tiny_len;
 
-	/* 3 tested best */
-	MLZ_CONST mlz_int len_bits = 3;
-
 	MLZ_RET_FALSE(*db < de);
 
 	nlit = (mlz_int)(le - lb);
@@ -376,10 +376,10 @@ static mlz_bool mlz_output_match(
 
 	#define MLZ_ADD_SHORT_LEN() \
 		len -= MLZ_MIN_MATCH; \
-		for (j=0; j<len_bits; j++) \
+		for (j=0; j<MLZ_SHORT_LEN_BITS; j++) \
 			MLZ_RET_FALSE(mlz_add_bit(accum, db, de, (len >> j) & 1));
 
-	tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1<<len_bits);
+	tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1<<MLZ_SHORT_LEN_BITS);
 
 	if (dist > 0 && dist-1 < 256 && tiny_len) {
 		MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 1));
