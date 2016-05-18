@@ -1,4 +1,4 @@
-mini-LZ library (mlz) v0.1d
+mini-LZ library (mlz) v0.1e
 (c) Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C
@@ -14,7 +14,7 @@ compressed size: ~71MB (worse than zlib but still relatively good)
 
 interface:
 checked or unchecked decompression (unchecked means doesn't check for buffer bounds overflow)
-single-file unchecked public domain decompression (mlz_dec_mini.h)
+single-file unchecked decompression (mlz_dec_mini.h)
 simple interface for streaming codec
 
 simple example streaming commandline tool in mlzc.c (just define MLZ_COMMANDLINE_TOOL)

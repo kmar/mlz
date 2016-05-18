@@ -34,6 +34,10 @@
 
 #if !defined(MLZ_COMMON_H)
 
+#if !defined(MLZ_API)
+#	define MLZ_API
+#endif
+
 #if !defined(MLZ_LIKELY)
 #	if defined(__clang__) || defined(__GNUC__)
 #		define MLZ_LIKELY(x)   __builtin_expect(!!(x), 1)
@@ -59,12 +63,11 @@ typedef int32_t     mlz_int;
 #	define MLZ_CONST const
 #endif
 
-typedef enum {
-	MLZ_MIN_MATCH   = 3,
-	MLZ_ACCUM_BITS  = 24,
-	MLZ_ACCUM_BYTES = 3
-} mlz_constants;
+#define MLZ_MIN_MATCH  3
+#define MLZ_ACCUM_BITS 24
+#define MLZ_ACCUM_BYTES ((MLZ_ACCUM_BITS)/8)
 
+/* !defined MLZ_COMMON_H */
 #endif
 
 #define MLZ_DEC_GUARD_MASK (1u << MLZ_ACCUM_BITS)
@@ -206,7 +209,8 @@ typedef enum {
 	mlz_byte *db = (mlz_byte *)dst; \
 	MLZ_CONST mlz_byte *odb = db;
 
-int mlz_decompress_mini(
+MLZ_API int
+mlz_decompress_mini(
 	void       *dst,
 	const void *src,
 	int         src_size
@@ -282,7 +286,6 @@ int mlz_decompress_mini(
 	return (int)(db - odb);
 }
 
-#undef MLZ_CONST
 #undef MLZ_DEC_GUARD_MASK
 #undef MLZ_DEC_1BIT_MASK
 #undef MLZ_DEC_2BIT_MASK
@@ -305,5 +308,14 @@ int mlz_decompress_mini(
 #undef MLZ_FULL_MATCH
 #undef MLZ_LITERAL_UNSAFE
 #undef MLZ_INIT_DECOMPRESS
+#undef MLZ_MIN_MATCH
+#undef MLZ_ACCUM_BITS
+#undef MLZ_ACCUM_BYTES
+
+#if !defined(MLZ_COMMON_H)
+#	undef MLZ_CONST
+#	undef MLZ_LIKELY
+#	undef MLZ_UNLIKELY
+#endif
 
 #endif
