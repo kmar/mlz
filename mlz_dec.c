@@ -28,7 +28,6 @@
 */
 
 #include "mlz_dec.h"
-#include <string.h>
 
 #define MLZ_DEC_GUARD_MASK (1u << MLZ_ACCUM_BITS)
 #define MLZ_DEC_1BIT_MASK  ~1u
@@ -116,8 +115,20 @@
  \
 	MLZ_COPY_MATCH_UNSAFE()
 
-/* note: using memmove because of streaming */
-#define MLZ_LITCOPY(db, sb, run) memmove(db, sb, run)
+#define MLZ_LITCOPY(db, sb, run) \
+	{ \
+		mlz_int chrun = run >> 2; \
+		run &= 3; \
+		while (chrun-- > 0) { \
+			*db++ = *sb++; \
+			*db++ = *sb++; \
+			*db++ = *sb++; \
+			*db++ = *sb++; \
+		} \
+ \
+		while (run-- > 0) \
+			*db++ = *sb++; \
+	}
 
 #define MLZ_LITERAL_RUN() \
 	{ \
@@ -126,8 +137,6 @@
 		sb += 2; \
 		MLZ_RET_FALSE(sb + run <= se && db + run <= de); \
 		MLZ_LITCOPY(db, sb, run); \
-		db += run; \
-		sb += run; \
 	}
 
 #define MLZ_LITERAL_RUN_UNSAFE() \
@@ -135,8 +144,6 @@
 		int run = sb[0] + (sb[1] << 8); \
 		sb += 2; \
 		MLZ_LITCOPY(db, sb, run); \
-		db += run; \
-		sb += run; \
 	}
 
 #define MLZ_LITERAL_RUN_SAFE() \

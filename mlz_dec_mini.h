@@ -32,8 +32,6 @@
 
 /* unsafe (=no bounds checks) minimal all-in-one decompression */
 
-#include <string.h>
-
 #if !defined(MLZ_COMMON_H)
 
 #if !defined(MLZ_LIKELY)
@@ -144,18 +142,19 @@ typedef enum {
  \
 	MLZ_COPY_MATCH_UNSAFE()
 
-/* note: using memmove because of streaming */
-#define MLZ_LITCOPY(db, sb, run) memmove(db, sb, run)
-
-#define MLZ_LITERAL_RUN() \
+#define MLZ_LITCOPY(db, sb, run) \
 	{ \
-		int run = sb[0] + (sb[1] << 8); \
-		MLZ_RET_FALSE(run >= MLZ_MIN_LIT_RUN); \
-		sb += 2; \
-		MLZ_RET_FALSE(sb + run <= se && db + run <= de); \
-		MLZ_LITCOPY(db, sb, run); \
-		db += run; \
-		sb += run; \
+		mlz_int chrun = run >> 2; \
+		run &= 3; \
+		while (chrun-- > 0) { \
+			*db++ = *sb++; \
+			*db++ = *sb++; \
+			*db++ = *sb++; \
+			*db++ = *sb++; \
+		} \
+ \
+		while (run-- > 0) \
+			*db++ = *sb++; \
 	}
 
 #define MLZ_LITERAL_RUN_UNSAFE() \
@@ -163,8 +162,6 @@ typedef enum {
 		int run = sb[0] + (sb[1] << 8); \
 		sb += 2; \
 		MLZ_LITCOPY(db, sb, run); \
-		db += run; \
-		sb += run; \
 	}
 
 #define MLZ_TINY_MATCH() \
@@ -301,7 +298,6 @@ int mlz_decompress_mini(
 #undef MLZ_COPY_MATCH_UNSAFE
 #undef MLZ_COPY_MATCH
 #undef MLZ_LITCOPY
-#undef MLZ_LITERAL_RUN
 #undef MLZ_LITERAL_RUN_UNSAFE
 #undef MLZ_TINY_MATCH
 #undef MLZ_SHORT_MATCH
