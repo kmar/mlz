@@ -30,7 +30,7 @@
 #include "mlz_dec.h"
 
 #define MLZ_DEC_GUARD_MASK (1u << MLZ_ACCUM_BITS)
-#define MLZ_DEC_1BIT_MASK  ~1u
+#define MLZ_DEC_0BIT_MASK  ~1u
 #define MLZ_DEC_2BIT_MASK  ~7u
 #define MLZ_DEC_3BIT_MASK  ~15u
 #define MLZ_DEC_6BIT_MASK  ~127u
@@ -44,13 +44,13 @@
 	}
 
 #define MLZ_GET_BIT_FAST_NOACCUM(res) \
-	MLZ_ASSERT(accum & MLZ_DEC_1BIT_MASK); \
+	MLZ_ASSERT(accum & MLZ_DEC_0BIT_MASK); \
 	res = (int)(accum & 1); \
 	accum >>= 1;
 
 #define MLZ_GET_BIT_CHECK(res, stmt) \
 	MLZ_GET_BIT_FAST_NOACCUM(res) \
-	if (MLZ_UNLIKELY(!(accum & MLZ_DEC_1BIT_MASK))) { \
+	if (MLZ_UNLIKELY(!(accum & MLZ_DEC_0BIT_MASK))) { \
 		stmt \
 		MLZ_LOAD_ACCUM() \
 	}
@@ -132,7 +132,7 @@
 
 #define MLZ_LITERAL_RUN() \
 	{ \
-		int run = sb[0] + (sb[1] << 8); \
+		mlz_int run = sb[0] + (sb[1] << 8); \
 		MLZ_RET_FALSE(run >= MLZ_MIN_LIT_RUN); \
 		sb += 2; \
 		MLZ_RET_FALSE(sb + run <= se && db + run <= de); \
@@ -141,7 +141,7 @@
 
 #define MLZ_LITERAL_RUN_UNSAFE() \
 	{ \
-		int run = sb[0] + (sb[1] << 8); \
+		mlz_int run = sb[0] + (sb[1] << 8); \
 		sb += 2; \
 		MLZ_LITCOPY(db, sb, run); \
 	}
@@ -447,7 +447,7 @@ mlz_decompress_unsafe(
 }
 
 #undef MLZ_DEC_GUARD_MASK
-#undef MLZ_DEC_1BIT_MASK
+#undef MLZ_DEC_0BIT_MASK
 #undef MLZ_DEC_2BIT_MASK
 #undef MLZ_DEC_3BIT_MASK
 #undef MLZ_DEC_6BIT_MASK

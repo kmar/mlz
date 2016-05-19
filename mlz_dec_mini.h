@@ -71,7 +71,7 @@ typedef int32_t     mlz_int;
 #endif
 
 #define MLZ_DEC_GUARD_MASK (1u << MLZ_ACCUM_BITS)
-#define MLZ_DEC_1BIT_MASK  ~1u
+#define MLZ_DEC_0BIT_MASK  ~1u
 #define MLZ_DEC_2BIT_MASK  ~7u
 #define MLZ_DEC_3BIT_MASK  ~15u
 #define MLZ_DEC_6BIT_MASK  ~127u
@@ -90,7 +90,7 @@ typedef int32_t     mlz_int;
 
 #define MLZ_GET_BIT_FAST(res) \
 	MLZ_GET_BIT_FAST_NOACCUM(res) \
-	if (MLZ_UNLIKELY(!(accum & MLZ_DEC_1BIT_MASK))) { \
+	if (MLZ_UNLIKELY(!(accum & MLZ_DEC_0BIT_MASK))) { \
 		MLZ_LOAD_ACCUM() \
 	}
 
@@ -162,7 +162,7 @@ typedef int32_t     mlz_int;
 
 #define MLZ_LITERAL_RUN_UNSAFE() \
 	{ \
-		int run = sb[0] + (sb[1] << 8); \
+		mlz_int run = sb[0] + (sb[1] << 8); \
 		sb += 2; \
 		MLZ_LITCOPY(db, sb, run); \
 	}
@@ -287,7 +287,7 @@ mlz_decompress_mini(
 }
 
 #undef MLZ_DEC_GUARD_MASK
-#undef MLZ_DEC_1BIT_MASK
+#undef MLZ_DEC_0BIT_MASK
 #undef MLZ_DEC_2BIT_MASK
 #undef MLZ_DEC_3BIT_MASK
 #undef MLZ_DEC_6BIT_MASK
