@@ -480,10 +480,8 @@ mlz_compress(
 
 	MLZ_RET_FALSE(mlz_matcher_clear(matcher) && dst && src);
 
-#if !defined(__BORLANDC__)
 	/* cannot handle blocks larger than 2G - 64k - 1 */
-	MLZ_RET_FALSE(sb - osb <= INT_MAX && se - sb <= INT_MAX);
-#endif
+	MLZ_RET_FALSE(se - osb < INT_MAX);
 
 	level = mlz_clamp(level, 0, 10);
 	loops = INT_MAX;
