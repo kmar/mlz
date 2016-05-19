@@ -309,7 +309,7 @@ MLZ_INLINE void mlz_match_hash_next_byte(struct mlz_matcher *m, mlz_uint hash, s
 
 	idx = m->hash + hash;
 	m->list[pos & MLZ_DICT_MASK] = *idx;
-	*idx = pos & MLZ_DICT_MASK;
+	*idx = (mlz_ushort)(pos & MLZ_DICT_MASK);
 }
 
 static mlz_bool mlz_output_match(
@@ -633,7 +633,7 @@ mlz_compress_simple(
 
 	res = mlz_compress(m, dst, dst_size, src, src_size, 0, level);
 
-	mlz_matcher_free(m);
+	(void)mlz_matcher_free(m);
 	return res;
 }
 
