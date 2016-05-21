@@ -129,18 +129,11 @@ MLZ_INLINE mlz_bool mlz_add_bit(mlz_accumulator *accum, mlz_byte **db, MLZ_CONST
 MLZ_INLINE mlz_int mlz_compute_savings(mlz_int dist, mlz_int len)
 {
 	/* compute cost now */
-	mlz_int  bit_cost = 0;
 	mlz_bool tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << MLZ_SHORT_LEN_BITS);
+	/* note: we don't check for tiny_len && dist < (1 << 13)          */
+	/* here because it has no impact due to the way the matcher works */
+	mlz_int  bit_cost = tiny_len ? 3 + 3 + 8 + 8*(dist > 255) : 3 + 8 + 16 + 16*(len >= 255);
 
-	if (tiny_len && dist <= 256) {
-		bit_cost = 3 + 3 + 8;
-	} else if (tiny_len && dist < (1 << 13)) {
-		bit_cost = 3 + 3 + 16;
-	} else if (tiny_len) {
-		bit_cost = 3 + 3 + 16;
-	} else {
-		bit_cost = 3 + 8 + 16 + 16*(len >= 255);
-	}
 	return 9*len - bit_cost;
 }
 
@@ -329,17 +322,23 @@ static mlz_bool mlz_output_match(
 
 	nlit = (mlz_int)(le - lb);
 
-	/* literal run cost:                                                                       */
-	/* 3 bits + two words => 32 + 3 = 35 bits static cost + 8*lit => minimum literal run is 36 */
-	/* normally single literal costs 9 bits                                                    */
-	/* so we only do this for 36+ literals                                                     */
+	/* literal run cost:                                                                         */
+	/* 3 bits + 3 bits + byte + byte => 22 bits static cost + 8*lit => minimum literal run is 22 */
+	/* normally single literal costs 9 bits                                                      */
+	/* so we only do this for 23+ literals (because 23 gave better results than 22)              */
 	while (nlit >= MLZ_MIN_LIT_RUN) {
-		mlz_int run = mlz_min(65535, nlit);
-		MLZ_RET_FALSE(mlz_output_match(accum, MLZ_NULL, MLZ_NULL, db, de, 0, MLZ_MIN_MATCH));
+		mlz_int  enc_run;
+		mlz_int  run = mlz_min(65535 + MLZ_MIN_LIT_RUN, nlit);
+		mlz_bool long_run = run > 255 + MLZ_MIN_LIT_RUN;
+
+		MLZ_RET_FALSE(mlz_output_match(accum, MLZ_NULL, MLZ_NULL, db, de, 0, MLZ_MIN_MATCH + long_run));
+
+		enc_run = run - MLZ_MIN_LIT_RUN;
 
 		MLZ_RET_FALSE(*db + 1 < de);
-		*(*db)++ = (mlz_byte)(run & 255);
-		*(*db)++ = (mlz_byte)(run >> 8);
+		*(*db)++ = (mlz_byte)(enc_run & 255);
+		if (long_run)
+			*(*db)++ = (mlz_byte)(enc_run >> 8);
 
 		MLZ_RET_FALSE(*db + run <= de);
 		for (i=0; i<run; i++)
@@ -367,11 +366,12 @@ static mlz_bool mlz_output_match(
 	/*
 	bit 0: byte literal
 	match:
-	100: tiny match + 3 bits len-min_match + byte dist-1
-	101: short match + word dist (3 msbits decoded as short length)
+	100: tiny match + 3 bits len-min_match + byte dist
+	101: short match + word dist (3 msbits encoded as short length)
 	110: short match + 3 bits len-min match + word dist
-	111: full match + byte len (255 = word len follows) + word dist
-	dist = 0 => literal run (then word follows: number of literals, values < 36 are illegal)
+	111: full match + byte len (255 => word len follows) + word dist
+	dist = 0 => literal run (then word follows if len > MIN_MATCH, byte otherwise): number of literals
+	            len above MIN_MATCH + 1 is illegal)
 	*/
 
 	#define MLZ_ADD_SHORT_LEN() \
@@ -381,14 +381,14 @@ static mlz_bool mlz_output_match(
 
 	tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1<<MLZ_SHORT_LEN_BITS);
 
-	if (dist > 0 && dist-1 < 256 && tiny_len) {
+	if (dist < 256 && tiny_len) {
 		MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 1));
 		MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 0));
 		MLZ_RET_FALSE(mlz_add_bit(accum, db, de, 0));
 		MLZ_ADD_SHORT_LEN()
 
 		MLZ_RET_FALSE(*db < de);
-		*(*db)++ = (mlz_byte)((dist-1) & 255);
+		*(*db)++ = (mlz_byte)(dist & 255);
 		return MLZ_TRUE;
 	}
 

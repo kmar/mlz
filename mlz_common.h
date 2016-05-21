@@ -131,8 +131,8 @@ typedef enum {
 	MLZ_MAX_DIST    = 65535,
 	/* min match len of 3 tested better than 2 */
 	MLZ_MIN_MATCH   = 3,
-	MLZ_MAX_MATCH   = 65535,
-	MLZ_MIN_LIT_RUN = 36,
+	MLZ_MAX_MATCH   = 65535 + MLZ_MIN_MATCH,
+	MLZ_MIN_LIT_RUN = 23,
 	MLZ_ACCUM_BITS  = 24,
 	MLZ_ACCUM_BYTES = MLZ_ACCUM_BITS/8
 } mlz_constants;

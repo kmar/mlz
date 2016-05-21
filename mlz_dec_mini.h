@@ -162,14 +162,16 @@ typedef int32_t     mlz_int;
 
 #define MLZ_LITERAL_RUN_UNSAFE() \
 	{ \
-		mlz_int run = sb[0] + (sb[1] << 8); \
-		sb += 2; \
+		mlz_int run = *sb++; \
+		if (len > MLZ_MIN_MATCH) \
+			run += *sb++ << 8; \
+		run += MLZ_MIN_LIT_RUN; \
 		MLZ_LITCOPY(db, sb, run); \
 	}
 
 #define MLZ_TINY_MATCH() \
 	len += MLZ_MIN_MATCH; \
-	dist = *sb++ + 1;
+	dist = *sb++;
 
 #define MLZ_SHORT_MATCH() \
 	dist = sb[0] + (sb[1] << 8); \

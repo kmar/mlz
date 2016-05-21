@@ -130,19 +130,25 @@
 			*db++ = *sb++; \
 	}
 
+#define MLZ_LITERAL_RUN_COMMON() \
+	mlz_int run; \
+	run = *sb++; \
+	if (len > MLZ_MIN_MATCH) \
+		run += (*sb++ << 8); \
+	run += MLZ_MIN_LIT_RUN;
+
 #define MLZ_LITERAL_RUN() \
 	{ \
-		mlz_int run = sb[0] + (sb[1] << 8); \
-		MLZ_RET_FALSE(run >= MLZ_MIN_LIT_RUN); \
-		sb += 2; \
+		MLZ_LITERAL_RUN_COMMON() \
+		/* the following condition is just a data integrity check */ \
+		MLZ_RET_FALSE(len <= MLZ_MIN_MATCH+1); \
 		MLZ_RET_FALSE(sb + run <= se && db + run <= de); \
 		MLZ_LITCOPY(db, sb, run); \
 	}
 
 #define MLZ_LITERAL_RUN_UNSAFE() \
 	{ \
-		mlz_int run = sb[0] + (sb[1] << 8); \
-		sb += 2; \
+		MLZ_LITERAL_RUN_COMMON() \
 		MLZ_LITCOPY(db, sb, run); \
 	}
 
@@ -152,7 +158,7 @@
 
 #define MLZ_TINY_MATCH() \
 	len += MLZ_MIN_MATCH; \
-	dist = *sb++ + 1;
+	dist = *sb++;
 
 #define MLZ_TINY_MATCH_SAFE() \
 	MLZ_RET_FALSE(sb < se); \
@@ -249,11 +255,12 @@ mlz_decompress(
 	/*
 	bit 0: byte literal
 	match:
-	100: tiny match + 3 bits len-min_match + byte dist-1
+	100: tiny match + 3 bits len-min_match + byte dist
 	101: short match + word dist (3 msbits decoded as short length)
 	110: short match + 3 bits len-min match + word dist
 	111: full match + byte len (255 => word len follows) + word dist
-	dist = 0 => literal run (then word follows: number of literals, value < 36 (MIN_LIT_RUN) is illegal)
+	dist = 0 => literal run (then word follows if len > MIN_MATCH, byte otherwise): number of literals
+	            len above MIN_MATCH + 1 is illegal)
 	*/
 
 	MLZ_RET_FALSE(sb + MLZ_ACCUM_BYTES <= se);
