@@ -39,13 +39,14 @@ extern "C" {
 /* TODO?: come up with multithreaded interface for streaming decompression of independent blocks */
 typedef struct
 {
-	/* 64k previous context, nk block size, 1kb unpack reserve */
+	/* 64k previous context, nk block size, nkb unpack reserve */
 	mlz_byte            *buffer;
 	MLZ_CONST mlz_byte  *ptr;
 	MLZ_CONST mlz_byte  *top;
 	mlz_stream_params    params;
 	mlz_uint             checksum;
 	mlz_int              block_size;
+	mlz_int              block_reserve;
 	mlz_int              context_size;
 	mlz_bool             is_eof;
 	mlz_bool             first_block;

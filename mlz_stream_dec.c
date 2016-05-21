@@ -149,7 +149,7 @@ mlz_in_stream_open(
 {
 	mlz_byte       *buf;
 	mlz_in_stream  *ins;
-	mlz_int         context_size;
+	mlz_int         context_size, reserve;
 
 	MLZ_RET_FALSE(params);
 	/* block size test */
@@ -169,21 +169,25 @@ mlz_in_stream_open(
 	if (params->independent_blocks)
 		context_size = 0;
 
-	ins->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size + MLZ_BLOCK_DEC_RESERVE);
+	// in-place decompress reserve (max inflation is 1 bit per byte)
+	reserve = params->block_size/8 + MLZ_ACCUM_BYTES + 7;
+
+	ins->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size + reserve);
 	if (!buf) {
 		mlz_free(ins);
 		return MLZ_NULL;
 	}
 
-	ins->params       = *params;
-	ins->checksum     = params->initial_checksum;
-	ins->block_size   = params->block_size;
-	ins->context_size = context_size;
-	ins->ptr          = MLZ_NULL;
-	ins->top          = MLZ_NULL;
-	ins->is_eof       = MLZ_FALSE;
-	ins->first_block  = MLZ_TRUE;
-	ins->first_cached = MLZ_FALSE;
+	ins->params        = *params;
+	ins->checksum      = params->initial_checksum;
+	ins->block_size    = params->block_size;
+	ins->block_reserve = reserve;
+	ins->context_size  = context_size;
+	ins->ptr           = MLZ_NULL;
+	ins->top           = MLZ_NULL;
+	ins->is_eof        = MLZ_FALSE;
+	ins->first_block   = MLZ_TRUE;
+	ins->first_cached  = MLZ_FALSE;
 	return ins;
 }
 
@@ -237,8 +241,8 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		MLZ_RET_FALSE(mlz_read_little_endian(stream, &usize) &&
 			usize > 0 && usize <= (mlz_uint)stream->block_size);
 
-	target_pos = stream->context_size + stream->block_size + MLZ_BLOCK_DEC_RESERVE - blk_size;
-	/* make sure buffer is aligned, we have 1k reserve anyway */
+	target_pos = stream->context_size + stream->block_size + stream->block_reserve - blk_size;
+	/* make sure buffer is aligned, we have reserve anyway */
 	target_pos &= ~(mlz_uintptr)7;
 
 	target = stream->buffer + target_pos;

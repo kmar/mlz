@@ -82,9 +82,7 @@ enum mlz_stream_constants
 	MLZ_PARTIAL_BLOCK_MASK      = 1 << 31,
 	MLZ_BLOCK_LEN_MASK          = MLZ_UNCOMPRESSED_BLOCK_MASK-1,
 	/* to support dependent-block streaming */
-	MLZ_BLOCK_CONTEXT_SIZE      = MLZ_MAX_DIST+1,
-	/* decompress reserve */
-	MLZ_BLOCK_DEC_RESERVE		= 1 << 10
+	MLZ_BLOCK_CONTEXT_SIZE      = MLZ_MAX_DIST+1
 };
 
 #ifdef __cplusplus
