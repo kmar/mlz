@@ -63,9 +63,10 @@ typedef int32_t     mlz_int;
 #	define MLZ_CONST const
 #endif
 
-#define MLZ_MIN_MATCH  3
-#define MLZ_ACCUM_BITS 24
+#define MLZ_MIN_MATCH   3
+#define MLZ_ACCUM_BITS  24
 #define MLZ_ACCUM_BYTES ((MLZ_ACCUM_BITS)/8)
+#define MLZ_MIN_LIT_RUN 23
 
 /* !defined MLZ_COMMON_H */
 #endif
@@ -310,11 +311,12 @@ mlz_decompress_mini(
 #undef MLZ_FULL_MATCH
 #undef MLZ_LITERAL_UNSAFE
 #undef MLZ_INIT_DECOMPRESS
-#undef MLZ_MIN_MATCH
-#undef MLZ_ACCUM_BITS
-#undef MLZ_ACCUM_BYTES
 
 #if !defined(MLZ_COMMON_H)
+#	undef MLZ_MIN_MATCH
+#	undef MLZ_ACCUM_BITS
+#	undef MLZ_ACCUM_BYTES
+#	undef MLZ_MIN_LIT_RUN
 #	undef MLZ_CONST
 #	undef MLZ_LIKELY
 #	undef MLZ_UNLIKELY
