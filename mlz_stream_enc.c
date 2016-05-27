@@ -29,7 +29,20 @@
 
 #include "mlz_stream_enc.h"
 #include "mlz_enc.h"
+#include "mlz_thread.h"
 #include <string.h>
+
+static mlz_bool mlz_out_stream_free(mlz_out_stream *stream)
+{
+	mlz_int i;
+	for (i=0; i<stream->num_threads; i++)
+		MLZ_RET_FALSE(mlz_matcher_free(stream->matchers[i]));
+
+	mlz_free(stream->buffer_unaligned);
+	mlz_free(stream);
+
+	return MLZ_TRUE;
+}
 
 mlz_out_stream *
 mlz_out_stream_open(
@@ -39,7 +52,8 @@ mlz_out_stream_open(
 {
 	mlz_byte       *buf;
 	mlz_out_stream *outs;
-	mlz_int         context_size;
+	mlz_int         i, context_size;
+	mlz_int         num_threads = 1;
 
 	MLZ_RET_FALSE(params);
 	/* block size test */
@@ -51,6 +65,7 @@ mlz_out_stream_open(
 
 	outs = (mlz_out_stream *)mlz_malloc(sizeof(mlz_out_stream));
 	MLZ_RET_FALSE(outs);
+	memset(outs, 0, sizeof(mlz_out_stream));
 
 	context_size = MLZ_BLOCK_CONTEXT_SIZE;
 	if (params->block_size < context_size)
@@ -59,24 +74,39 @@ mlz_out_stream_open(
 	if (params->independent_blocks)
 		context_size = 0;
 
-	outs->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size*2);
-	if (!buf) {
-	out_stream_error:
-		mlz_free(outs);
+#if defined(MLZ_THREADS)
+	if (params->jobs)
+		num_threads += params->jobs->num_threads;
+	MLZ_RET_FALSE(num_threads > 0 && num_threads <= MLZ_MAX_THREADS);
+#endif
+
+	outs->buffer_unaligned = (mlz_byte *)mlz_malloc(context_size + params->block_size*2*num_threads + MLZ_CACHELINE_ALIGN-1);
+	if (!outs->buffer_unaligned) {
+out_stream_error:
+		(void)mlz_out_stream_free(outs);
 		return MLZ_NULL;
 	}
 
-	if (!mlz_matcher_init(&outs->matcher)) {
-		mlz_free(buf);
-		goto out_stream_error;
-	}
+	buf = outs->buffer_unaligned;
+	buf = (mlz_byte *)((mlz_uintptr)buf & ~((mlz_uintptr)MLZ_CACHELINE_ALIGN-1));
+	if (buf < outs->buffer_unaligned)
+		buf += MLZ_CACHELINE_ALIGN;
+
+	MLZ_ASSERT(buf >= outs->buffer_unaligned);
+
+	outs->buffer = buf;
+
+	for (i=0; i<num_threads; i++)
+		if (!mlz_matcher_init(outs->matchers + i))
+			goto out_stream_error;
 
 	outs->block_size   = params->block_size;
 	outs->context_size = context_size;
-	outs->out_buffer   = buf + context_size + params->block_size;
+	outs->out_buffer   = buf + context_size + params->block_size*num_threads;
 	outs->checksum     = params->initial_checksum;
 	outs->ptr          = 0;
 	outs->level        = level < 0 ? 0 : (level > MLZ_LEVEL_MAX ? MLZ_LEVEL_MAX : level);
+	outs->num_threads  = num_threads;
 	outs->first_block  = MLZ_TRUE;
 	outs->params       = *params;
 
@@ -93,78 +123,137 @@ static mlz_bool mlz_write_little_endian(mlz_out_stream *stream, mlz_uint val)
 	return stream->params.write_func(stream->params.handle, buf, 4) == 4;
 }
 
+#if defined(MLZ_THREADS)
+static void mlz_compress_block_job(int thread, void *param)
+{
+	mlz_int ptr;
+	mlz_out_stream *stream = (mlz_out_stream *)param;
+	mlz_int num_sub_blocks = (stream->ptr + stream->block_size-1)/stream->block_size;
+
+	/* add 1 because jobs are just helpers to calling thread */
+	++thread;
+
+	if (thread < num_sub_blocks-1)
+		ptr = stream->block_size;
+	else
+		ptr = stream->ptr - thread*stream->block_size;
+
+	/* flush (compress) */
+	stream->out_lens[thread] = mlz_compress(
+		stream->matchers[thread],
+		stream->out_buffer + thread*stream->block_size,
+		stream->block_size,
+		stream->buffer + stream->context_size + thread*stream->block_size,
+		ptr,
+		stream->context_size,
+		stream->level
+	);
+}
+#endif
+
 static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 {
-	size_t out_len, real_out_len;
-	mlz_bool partial_block = MLZ_FALSE;
+	mlz_int i, num_sub_blocks;
 
 	MLZ_ASSERT(stream);
 	/* if nothing to do => success */
 	if (!stream->ptr)
 		return MLZ_TRUE;
 
+	num_sub_blocks = (stream->ptr + stream->block_size-1)/stream->block_size;
+
+#if defined(MLZ_THREADS)
+	if (stream->params.jobs) {
+		for (i=0; i<num_sub_blocks-1; i++) {
+			mlz_job job;
+			job.job   = mlz_compress_block_job;
+			job.param = stream;
+			MLZ_RET_FALSE(mlz_jobs_enqueue(stream->params.jobs, job));
+		}
+	}
+#endif
+
 	/* flush (compress) */
-	out_len = mlz_compress(
-		stream->matcher,
+	stream->out_lens[0] = mlz_compress(
+		stream->matchers[0],
 		stream->out_buffer,
 		stream->block_size,
 		stream->buffer + stream->context_size,
-		stream->ptr,
+		num_sub_blocks > 1 ? stream->block_size : stream->ptr,
 		stream->context_size*(stream->first_block != MLZ_TRUE),
 		stream->level
 	);
 
+#if defined(MLZ_THREADS)
+	if (stream->params.jobs)
+		MLZ_RET_FALSE(mlz_jobs_wait(stream->params.jobs));
+#endif
+
 	stream->first_block = MLZ_FALSE;
 
-	real_out_len = out_len;
+	for (i=0; i<num_sub_blocks; i++) {
+		size_t out_len, real_out_len;
+		mlz_int ptr;
+		mlz_bool partial_block     = MLZ_FALSE;
+		mlz_byte *out_ptr          = stream->out_buffer + i*stream->block_size;
+		MLZ_CONST mlz_byte *in_ptr = stream->buffer + stream->context_size + i*stream->block_size;
 
-	MLZ_ASSERT(out_len <= (size_t)MLZ_MAX_BLOCK_SIZE && stream->ptr <= MLZ_MAX_BLOCK_SIZE);
+		if (i < num_sub_blocks-1)
+			ptr = stream->block_size;
+		else
+			ptr = stream->ptr - i*stream->block_size;
 
-	if (!out_len || out_len >= (size_t)stream->ptr) {
-		memcpy(stream->out_buffer, stream->buffer + stream->context_size, stream->ptr);
-		real_out_len = (size_t)stream->ptr;
-		/* mark as uncompressed */
-		real_out_len |= MLZ_UNCOMPRESSED_BLOCK_MASK;
-	}
+		out_len = stream->out_lens[i];
+		real_out_len = out_len;
 
-	/* mark as partial block if necessary */
-	if (stream->ptr != stream->block_size) {
-		real_out_len |= MLZ_PARTIAL_BLOCK_MASK;
-		partial_block = MLZ_TRUE;
-	}
+		MLZ_ASSERT(out_len <= (size_t)MLZ_MAX_BLOCK_SIZE && ptr <= MLZ_MAX_BLOCK_SIZE);
 
-	/* execute block callback if desired */
-	if (stream->params.block_func)
-		stream->params.block_func(stream->params.handle);
+		if (!out_len || out_len >= (size_t)ptr) {
+			memcpy(out_ptr, in_ptr, ptr);
+			real_out_len = (size_t)ptr;
+			/* mark as uncompressed */
+			real_out_len |= MLZ_UNCOMPRESSED_BLOCK_MASK;
+		}
 
-	/* write block len + flags */
-	MLZ_RET_FALSE(mlz_write_little_endian(stream, (mlz_uint)real_out_len));
+		/* mark as partial block if necessary */
+		if (ptr != stream->block_size) {
+			real_out_len |= MLZ_PARTIAL_BLOCK_MASK;
+			partial_block = MLZ_TRUE;
+		}
 
-	real_out_len &= MLZ_BLOCK_LEN_MASK;
+		/* execute block callback if desired */
+		if (stream->params.block_func)
+			stream->params.block_func(stream->params.handle);
 
-	/* compute and write compressed block checksum if needed */
-	if (stream->params.block_checksum) {
-		mlz_uint checksum = stream->params.block_checksum(stream->out_buffer, real_out_len);
-		MLZ_RET_FALSE(mlz_write_little_endian(stream, (mlz_uint)checksum));
-	}
+		/* write block len + flags */
+		MLZ_RET_FALSE(mlz_write_little_endian(stream, (mlz_uint)real_out_len));
 
-	if (partial_block)
-		MLZ_RET_FALSE(mlz_write_little_endian(stream, (mlz_uint)stream->ptr));
+		real_out_len &= MLZ_BLOCK_LEN_MASK;
 
-	/* write block */
-	MLZ_RET_FALSE(stream->params.write_func(stream->params.handle, stream->out_buffer,
-		(mlz_intptr)real_out_len) == (mlz_intptr)real_out_len);
+		/* compute and write compressed block checksum if needed */
+		if (stream->params.block_checksum) {
+			mlz_uint checksum = stream->params.block_checksum(out_ptr, real_out_len);
+			MLZ_RET_FALSE(mlz_write_little_endian(stream, (mlz_uint)checksum));
+		}
 
-	/* update incremental checksum if needed */
-	if (stream->params.incremental_checksum) {
-		stream->checksum =
-			stream->params.incremental_checksum(stream->buffer + stream->context_size,
-				stream->ptr, stream->checksum);
+		if (partial_block)
+			MLZ_RET_FALSE(mlz_write_little_endian(stream, (mlz_uint)ptr));
+
+		/* write block */
+		MLZ_RET_FALSE(stream->params.write_func(stream->params.handle, out_ptr,
+			(mlz_intptr)real_out_len) == (mlz_intptr)real_out_len);
+
+		/* update incremental checksum if needed */
+		if (stream->params.incremental_checksum) {
+			stream->checksum =
+				stream->params.incremental_checksum(in_ptr,
+					ptr, stream->checksum);
+		}
 	}
 
 	/* copy block context unless last block */
 	if (stream->context_size > 0 && stream->ptr >= stream->context_size)
-		memcpy(stream->buffer, stream->buffer + stream->ptr, stream->context_size );
+		memcpy(stream->buffer, stream->buffer + stream->ptr, stream->context_size);
 
 	/* reset pointer */
 	stream->ptr = 0;
@@ -190,10 +279,7 @@ mlz_out_stream_close(
 	if (stream->params.close_func)
 		MLZ_RET_FALSE(stream->params.close_func(stream->params.handle));
 
-	MLZ_RET_FALSE(mlz_matcher_free(stream->matcher));
-	mlz_free(stream->buffer);
-	mlz_free(stream);
-	return MLZ_TRUE;
+	return mlz_out_stream_free(stream);
 }
 
 mlz_intptr
@@ -210,7 +296,7 @@ mlz_stream_write(
 	while (size > 0) {
 		/* filling buffer */
 		mlz_intptr to_fill  = size;
-		mlz_intptr capacity = stream->block_size - stream->ptr;
+		mlz_intptr capacity = stream->block_size*stream->num_threads - stream->ptr;
 		if (to_fill > capacity)
 			to_fill = capacity;
 		if (to_fill > 0) {
@@ -220,7 +306,7 @@ mlz_stream_write(
 			src         += to_fill;
 			nwritten    += to_fill;
 		}
-		if (stream->ptr >= stream->block_size && !mlz_out_stream_flush_block(stream))
+		if (stream->ptr >= stream->block_size*stream->num_threads && !mlz_out_stream_flush_block(stream))
 			return -1;
 	}
 

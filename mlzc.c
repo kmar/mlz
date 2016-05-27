@@ -41,6 +41,7 @@
 #include "mlz_stream_dec.h"
 #include "mlz_enc.h"
 #include "mlz_version.h"
+#include "mlz_thread.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,9 @@ static mlz_bool block_checksum  = MLZ_FALSE;
 static mlz_bool show_ver        = MLZ_FALSE;
 static mlz_bool unsafe          = MLZ_FALSE;
 static mlz_int  block_size      = 65536;
+#if defined(MLZ_THREADS)
+static mlz_int  num_threads     = 1;
+#endif
 
 static char buffer[65536];
 
@@ -114,6 +118,18 @@ static int parse_args(int argc, char **argv)
 				return 2;
 			}
 			block_size = (mlz_int)ablock_size;
+#if defined(MLZ_THREADS)
+		} else if (strcmp(argv[i], "-T") == 0 || strcmp(argv[i], "--threads") == 0) {
+			if (i+1 >= argc) {
+				fprintf(stderr, "threads expect argument\n");
+				return 2;
+			}
+			num_threads = (mlz_int)strtol(argv[++i], MLZ_NULL, 10);
+			if (num_threads < 1 || num_threads > MLZ_MAX_THREADS) {
+				fprintf(stderr, "invalid number of threads: %d\n", (int)num_threads);
+				return 2;
+			}
+#endif
 		} else {
 			fprintf(stderr, "invalid argument: `%s'\n", argv[i]);
 			return 2;
@@ -146,10 +162,29 @@ static void help(void)
 	printf("       -bc or --block-checksum include compressed block checksum\n");
 	printf("       -v or --version   show library version\n");
 	printf("       -u or --unsafe    unsafe decompression\n");
+#if defined(MLZ_THREADS)
+	printf("       -T or --threads <n> set number of threads (1-%d)\n", (int)MLZ_MAX_THREADS);
+#endif
 	printf("       -i or --independent use independent blocks\n");
 	printf("           when using independent blocks, it's recommended\n");
 	printf("           to use block size of 128k or more\n");
 }
+
+#if defined(MLZ_THREADS)
+
+static mlz_jobs jobs = MLZ_NULL;
+
+static void init_jobs(void)
+{
+	if (num_threads > 1)
+		jobs = mlz_jobs_create(num_threads-1);
+}
+
+static void destroy_jobs(void)
+{
+	(void)mlz_jobs_destroy(jobs);
+}
+#endif
 
 static int process(void)
 {
@@ -158,11 +193,10 @@ static int process(void)
 	if (!test && !force) {
 		FILE *ftest = fopen(out_file, "rb");
 		if (ftest) {
-			char buf[16];
+			char buf[16] = {0};
 			fclose(ftest);
 			printf("output file `%s' already exists.\noverwrite? (y/n)\n", out_file);
-			fgets(buf, sizeof(buf), stdin);
-			if (buf[0] != 'y') {
+			if (!fgets(buf, sizeof(buf), stdin) || buf[0] != 'y') {
 				printf("aborted\n");
 				return 0;
 			}
@@ -190,6 +224,10 @@ static int process(void)
 		par.handle             = fout;
 		par.independent_blocks = independent;
 		par.block_size         = block_size;
+		par.close_func         = MLZ_NULL;
+#if defined(MLZ_THREADS)
+		par.jobs               = jobs;
+#endif
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
 
@@ -228,7 +266,8 @@ static int process(void)
 		par.handle             = fin;
 		par.independent_blocks = independent;
 		par.block_size         = block_size;
-		par.unsafe = unsafe;
+		par.unsafe             = unsafe;
+		par.close_func         = MLZ_NULL;
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
 
@@ -277,6 +316,7 @@ static int process(void)
 
 int main(int argc, char **argv)
 {
+	int res;
 	int err = parse_args(argc, argv);
 	if (show_ver)
 		printf("mlz v" MLZ_VERSION "\n");
@@ -284,7 +324,16 @@ int main(int argc, char **argv)
 		help();
 		return err;
 	}
-	return process();
+
+#if defined(MLZ_THREADS)
+	init_jobs();
+	res = process();
+	destroy_jobs();
+#else
+	res = process();
+#endif
+
+	return res;
 }
 
 #endif

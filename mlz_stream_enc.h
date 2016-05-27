@@ -38,20 +38,25 @@ extern "C" {
 
 struct mlz_matcher;
 
-/* TODO?: come up with multithreaded interface for streaming compression */
 typedef struct
 {
-	struct mlz_matcher  *matcher;
-	/* 64k previous context, nk block size, nk output buffer */
+	/* for each parallel thread */
+	struct mlz_matcher  *matchers[MLZ_MAX_THREADS];
+	/* original unaligned buffer ptr */
+	mlz_byte            *buffer_unaligned;
+	/* 64k previous context, nk block size, nk output buffer; 1k aligned */
 	mlz_byte            *buffer;
 	/* points into buffer */
 	mlz_byte            *out_buffer;
 	mlz_stream_params    params;
+	/* temporary output lengths in multi-threaded mode */
+	size_t               out_lens[MLZ_MAX_THREADS];
 	mlz_uint             checksum;
 	mlz_int              ptr;
 	mlz_int              block_size;
 	mlz_int              context_size;
 	mlz_int              level;
+	mlz_int              num_threads;
 	mlz_bool             first_block;
 } mlz_out_stream;
 

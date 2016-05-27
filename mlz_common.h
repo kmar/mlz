@@ -128,13 +128,16 @@ typedef mlz_int    mlz_bool;
 /* compression-specific constants */
 
 typedef enum {
-	MLZ_MAX_DIST    = 65535,
+	MLZ_MAX_DIST     = 65535,
 	/* min match len of 3 tested better than 2 */
-	MLZ_MIN_MATCH   = 3,
-	MLZ_MAX_MATCH   = 65535 + MLZ_MIN_MATCH,
-	MLZ_MIN_LIT_RUN = 23,
-	MLZ_ACCUM_BITS  = 24,
-	MLZ_ACCUM_BYTES = MLZ_ACCUM_BITS/8
+	MLZ_MIN_MATCH    = 3,
+	MLZ_MAX_MATCH    = 65535 + MLZ_MIN_MATCH,
+	MLZ_MIN_LIT_RUN  = 23,
+	MLZ_ACCUM_BITS   = 24,
+	MLZ_ACCUM_BYTES  = MLZ_ACCUM_BITS/8,
+	/* internal streaming buffer alignment because of multi-threaded mode        */
+	/* usually cache line is 64 bytes (or less), but we want a safe reserve here */
+	MLZ_CACHELINE_ALIGN = 512
 } mlz_constants;
 
 #endif

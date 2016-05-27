@@ -123,6 +123,8 @@ mlz_adler32_simple(
 MLZ_CONST mlz_stream_params mlz_default_stream_params = {
 	/* user data (handle) */
 	MLZ_NULL,
+	/* multi-threaded */
+	MLZ_NULL,
 	mlz_stream_read_wrapper,
 	mlz_stream_write_wrapper,
 	mlz_stream_rewind_wrapper,

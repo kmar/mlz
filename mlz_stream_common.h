@@ -36,11 +36,15 @@
 extern "C" {
 #endif
 
+struct mlz_jobs;
+
 typedef struct {
 	/* user data (handle) */
-	void       *handle;
+	void            *handle;
+	/* for multi-threaded (de)compression, null if single-threaded */
+	struct mlz_jobs *jobs;
 	/* note: in stream doesn't need write func while outstream doesn't need read func */
-	/* low level read function, returns -1 on error, otherwise number of bytes read    */
+	/* low level read function, returns -1 on error, otherwise number of bytes read   */
 	mlz_intptr (*read_func)(void *handle, void *buf, mlz_intptr size);
 	/* low level write function, returns -1 on error, otherwise number of bytes written */
 	mlz_intptr (*write_func)(void *handle, MLZ_CONST void *buf, mlz_intptr size);
@@ -82,7 +86,9 @@ enum mlz_stream_constants
 	MLZ_PARTIAL_BLOCK_MASK      = 1 << 31,
 	MLZ_BLOCK_LEN_MASK          = MLZ_UNCOMPRESSED_BLOCK_MASK-1,
 	/* to support dependent-block streaming */
-	MLZ_BLOCK_CONTEXT_SIZE      = MLZ_MAX_DIST+1
+	MLZ_BLOCK_CONTEXT_SIZE      = MLZ_MAX_DIST+1,
+	/* maximum # of threads in multi-threaded mode */
+	MLZ_MAX_THREADS             = 32
 };
 
 #ifdef __cplusplus

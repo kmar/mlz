@@ -59,11 +59,12 @@ void *(*mlz_malloc)(size_t) = mlz_malloc_wrapper;
 void (*mlz_free)(void *)    = mlz_free_wrapper;
 
 /* simple hash-list (or hash-chain)                  */
-/* note that this helper structure uses 132kB of RAM */
+/* note that this helper structure uses 133kB of RAM */
 struct mlz_matcher
 {
 	mlz_ushort hash[MLZ_HASH_SIZE];
 	mlz_ushort list[MLZ_HASH_LIST_SIZE];
+	mlz_byte   pad [MLZ_CACHELINE_ALIGN];
 };
 
 mlz_bool mlz_matcher_init(struct mlz_matcher **matcher)
@@ -105,13 +106,16 @@ static mlz_bool mlz_flush_accum(mlz_accumulator *accum, mlz_byte **db, MLZ_CONST
 	if (!accum->count)
 		return MLZ_TRUE;
 
-	for (i=0; i<MLZ_ACCUM_BYTES; i++) {
+	for (i=0; i<MLZ_ACCUM_BYTES; i++)
 		accum->ptr[i] = (mlz_byte)((accum->bits >> 8*i) & 255);
-	}
+
 	accum->ptr = *db;
 	(*db) += MLZ_ACCUM_BYTES;
 	accum->bits  = 0;
 	accum->count = 0;
+
+	for (i=0; i<MLZ_ACCUM_BYTES; i++)
+		accum->ptr[i] = (mlz_byte)0;
 
 	return MLZ_TRUE;
 }
@@ -494,6 +498,8 @@ mlz_compress(
 	MLZ_RET_FALSE(db + MLZ_ACCUM_BYTES <= de);
 	accum.ptr = db;
 	db       += MLZ_ACCUM_BYTES;
+
+	memset(accum.ptr, 0, MLZ_ACCUM_BYTES);
 
 #define MLZ_HASHBYTE(sb)	\
 	hdata = sb[0] + (sb+1<se ? (sb[1] << 8) : 0) + (sb+2<se ? sb[2] << 16 : 0); \
