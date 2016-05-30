@@ -36,7 +36,9 @@
 
 #if defined(_WIN32)
 
-#	define WIN32_LEAN_AND_MEAN
+#	if !defined(WIN32_LEAN_AND_MEAN)
+#		define WIN32_LEAN_AND_MEAN
+#	endif
 #	include <windows.h>
 #	include <process.h>
 
@@ -388,7 +390,7 @@ mlz_jobs mlz_jobs_create(int num_threads)
 	res->queue_done_event = mlz_event_create();
 
 	if (!res->mutex || !res->queue_done_event || !mlz_event_set(res->queue_done_event)) {
-		mlz_jobs_destroy(res);
+		(void)mlz_jobs_destroy(res);
 		return MLZ_NULL;
 	}
 
@@ -400,7 +402,7 @@ mlz_jobs mlz_jobs_create(int num_threads)
 		jt->thread = mlz_thread_create();
 
 		if (!jt->event || !jt->thread || !mlz_thread_run(jt->thread, mlz_job_worker_proc, jt)) {
-			mlz_jobs_destroy(res);
+			(void)mlz_jobs_destroy(res);
 			return MLZ_NULL;
 		}
 	}

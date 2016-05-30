@@ -1,4 +1,4 @@
-mini-LZ library (mlz) v0.2b
+mini-LZ library (mlz) v0.2c
 (c) Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C
@@ -16,6 +16,7 @@ interface:
 checked or unchecked decompression (unchecked means doesn't check for buffer bounds overflow)
 single-file unchecked decompression (mlz_dec_mini.h)
 simple interface for streaming codec
+streams now have 2-byte header by default to store encoding params
 
 simple example streaming commandline tool in mlzc.c (just define MLZ_COMMANDLINE_TOOL)
 

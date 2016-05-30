@@ -73,6 +73,8 @@ typedef struct {
 	mlz_bool     independent_blocks;
 	/* unsafe: no bounds check, skip checksum (if any)  */
 	mlz_bool     unsafe;
+	/* use simple stream header to identify block params automatically */
+	mlz_bool     use_header;
 } mlz_stream_params;
 
 /* default params wrapped around stdio, just copy and assign handle */

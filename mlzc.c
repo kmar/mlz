@@ -59,6 +59,7 @@ static mlz_bool independent     = MLZ_FALSE;
 static mlz_bool block_checksum  = MLZ_FALSE;
 static mlz_bool show_ver        = MLZ_FALSE;
 static mlz_bool unsafe          = MLZ_FALSE;
+static mlz_bool raw             = MLZ_FALSE;
 static mlz_int  block_size      = 65536;
 #if defined(MLZ_THREADS)
 static mlz_int  num_threads     = 1;
@@ -76,7 +77,7 @@ static int parse_args(int argc, char **argv)
 			else if (!out_file)
 				out_file = argv[i];
 			else {
-				fprintf(stderr, "too many files\n");
+				(void)fprintf(stderr, "too many files\n");
 				return 1;
 			}
 			continue;
@@ -93,6 +94,8 @@ static int parse_args(int argc, char **argv)
 			show_ver = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--unsafe") == 0) {
 			unsafe = MLZ_TRUE;
+		} else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--raw") == 0) {
+			raw = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compress") == 0) {
 			compress = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--decompress") == 0) {
@@ -108,39 +111,39 @@ static int parse_args(int argc, char **argv)
 		} else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--block") == 0) {
 			long ablock_size;
 			if (i+1 >= argc) {
-				fprintf(stderr, "block size expects argument\n");
+				(void)fprintf(stderr, "block size expects argument\n");
 				return 2;
 			}
 			ablock_size = strtol(argv[++i], MLZ_NULL, 10);
 			ablock_size *= 1024;
 			if (ablock_size < MLZ_MIN_BLOCK_SIZE || ablock_size > MLZ_MAX_BLOCK_SIZE) {
-				fprintf(stderr, "invalid block size: %ld\n", ablock_size);
+				(void)fprintf(stderr, "invalid block size: %ld\n", ablock_size);
 				return 2;
 			}
 			block_size = (mlz_int)ablock_size;
 #if defined(MLZ_THREADS)
 		} else if (strcmp(argv[i], "-T") == 0 || strcmp(argv[i], "--threads") == 0) {
 			if (i+1 >= argc) {
-				fprintf(stderr, "threads expect argument\n");
+				(void)fprintf(stderr, "threads expect argument\n");
 				return 2;
 			}
 			num_threads = (mlz_int)strtol(argv[++i], MLZ_NULL, 10);
 			if (num_threads < 1 || num_threads > MLZ_MAX_THREADS) {
-				fprintf(stderr, "invalid number of threads: %d\n", (int)num_threads);
+				(void)fprintf(stderr, "invalid number of threads: %d\n", (int)num_threads);
 				return 2;
 			}
 #endif
 		} else {
-			fprintf(stderr, "invalid argument: `%s'\n", argv[i]);
+			(void)fprintf(stderr, "invalid argument: `%s'\n", argv[i]);
 			return 2;
 		}
 	}
 	if (!in_file && test) {
-		fprintf(stderr, "please specify input file\n");
+		(void)fprintf(stderr, "please specify input file\n");
 		return 3;
 	}
 	if (!out_file && !test) {
-		fprintf(stderr, "please specify both input and output file\n");
+		(void)fprintf(stderr, "please specify both input and output file\n");
 		return 3;
 	}
 	if (test)
@@ -168,6 +171,7 @@ static void help(void)
 	printf("       -i or --independent use independent blocks\n");
 	printf("           when using independent blocks, it's recommended\n");
 	printf("           to use block size of 128k or more\n");
+	printf("       -r or --raw       don't use stream header\n");
 }
 
 #if defined(MLZ_THREADS)
@@ -194,7 +198,7 @@ static int process(void)
 		FILE *ftest = fopen(out_file, "rb");
 		if (ftest) {
 			char buf[16] = {0};
-			fclose(ftest);
+			(void)fclose(ftest);
 			printf("output file `%s' already exists.\noverwrite? (y/n)\n", out_file);
 			if (!fgets(buf, sizeof(buf), stdin) || buf[0] != 'y') {
 				printf("aborted\n");
@@ -205,15 +209,15 @@ static int process(void)
 
 	fin = fopen(in_file, "rb");
 	if (!fin) {
-		fprintf(stderr, "cannot open infile: `%s'\n", in_file);
+		(void)fprintf(stderr, "cannot open infile: `%s'\n", in_file);
 		return 4;
 	}
 
 	if (!test) {
 		fout = fopen(out_file, "wb");
 		if (!fout) {
-			fclose(fin);
-			fprintf(stderr, "cannot create outfile: `%s'\n", out_file);
+			(void)fclose(fin);
+			(void)fprintf(stderr, "cannot create outfile: `%s'\n", out_file);
 			return 5;
 		}
 	}
@@ -230,13 +234,15 @@ static int process(void)
 #endif
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
+		if (raw)
+			par.use_header = MLZ_FALSE;
 
 		outs = mlz_out_stream_open(&par, level);
 		if (!outs) {
-			fclose(fin);
+			(void)fclose(fin);
 			if (fout)
-				fclose(fout);
-			fprintf(stderr, "couldn't create out stream\n");
+				(void)fclose(fout);
+			(void)fprintf(stderr, "couldn't create out stream\n");
 			return 6;
 		}
 		for (;;) {
@@ -244,19 +250,19 @@ static int process(void)
 			if (!nread)
 				break;
 			if (mlz_stream_write(outs, buffer, nread) != (mlz_intptr)nread) {
-				mlz_out_stream_close(outs);
-				fclose(fin);
+				(void)mlz_out_stream_close(outs);
+				(void)fclose(fin);
 				if (fout)
-					fclose(fout);
-				fprintf(stderr, "failed to write out stream\n");
+					(void)fclose(fout);
+				(void)fprintf(stderr, "failed to write out stream\n");
 				return 7;
 			}
 		}
 		if (!mlz_out_stream_close(outs)) {
-			fclose(fin);
+			(void)fclose(fin);
 			if (fout)
-				fclose(fout);
-			fprintf(stderr, "failed to close out stream\n");
+				(void)fclose(fout);
+			(void)fprintf(stderr, "failed to close out stream\n");
 			return 8;
 		}
 	} else {
@@ -270,47 +276,49 @@ static int process(void)
 		par.close_func         = MLZ_NULL;
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
+		if (raw)
+			par.use_header = MLZ_FALSE;
 
 		ins = mlz_in_stream_open(&par);
 		if (!ins) {
-			fclose(fin);
+			(void)fclose(fin);
 			if (fout)
-				fclose(fout);
-			fprintf(stderr, "couldn't create in stream\n");
+				(void)fclose(fout);
+			(void)fprintf(stderr, "couldn't create/open in stream\n");
 			return 9;
 		}
 		for (;;) {
 			mlz_intptr nread = mlz_stream_read(ins, buffer, sizeof(buffer));
 			if (nread < 0) {
-				mlz_in_stream_close(ins);
-				fclose(fin);
+				(void)mlz_in_stream_close(ins);
+				(void)fclose(fin);
 				if (fout)
-					fclose(fout);
-				fprintf(stderr, "failed to read in stream\n");
+					(void)fclose(fout);
+				(void)fprintf(stderr, "failed to read in stream\n");
 				return 10;
 			}
 			if (!nread)
 				break;
 			if (!test && fout && (mlz_intptr)fwrite(buffer, 1, nread, fout) != nread) {
-				mlz_in_stream_close(ins);
-				fclose(fin);
+				(void)mlz_in_stream_close(ins);
+				(void)fclose(fin);
 				if (fout)
-					fclose(fout);
-				fprintf(stderr, "failed to write out file\n");
+					(void)fclose(fout);
+				(void)fprintf(stderr, "failed to write out file\n");
 				return 11;
 			}
 		}
 		if (!mlz_in_stream_close(ins)) {
-			fclose(fin);
+			(void)fclose(fin);
 			if (fout)
-				fclose(fout);
-			fprintf(stderr, "failed to close in stream\n");
+				(void)fclose(fout);
+			(void)fprintf(stderr, "failed to close in stream\n");
 			return 12;
 		}
 	}
 	if (fout)
-		fclose(fout);
-	fclose(fin);
+		(void)fclose(fout);
+	(void)fclose(fin);
 	return 0;
 }
 

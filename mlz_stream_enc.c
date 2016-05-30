@@ -110,6 +110,37 @@ out_stream_error:
 	outs->first_block  = MLZ_TRUE;
 	outs->params       = *params;
 
+	/* prepare simple 2-byte block header        */
+	/* bits 4-0: log2(block_size)                */
+	/* bit 5   : independent                     */
+	/* bit 6   : use block checksum (adler32)    */
+	/* bit 7   : use incremental chsum (adler32) */
+	/* 2nd byte = ~hdr (validation)              */
+
+	if (params->use_header) {
+		mlz_byte hdr[2];
+		hdr[0] = hdr[1] = 0;
+
+		i = 1;
+		while (params->block_size > i) {
+			hdr[0]++;
+			i <<= 1;
+		}
+
+		MLZ_ASSERT( hdr[0] < (1 << 5) );
+
+		if (params->independent_blocks)
+			hdr[0] |= 0x20;
+		if (params->block_checksum)
+			hdr[0] |= 0x40;
+		if (params->incremental_checksum)
+			hdr[0] |= 0x80;
+		hdr[1] = (mlz_byte)~hdr[0];
+
+		if (params->write_func(params->handle, hdr, 2) != 2)
+			goto out_stream_error;
+	}
+
 	return outs;
 }
 

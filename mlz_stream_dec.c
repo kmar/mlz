@@ -141,7 +141,9 @@ MLZ_CONST mlz_stream_params mlz_default_stream_params = {
 	/* independent blocks flag */
 	MLZ_FALSE,
 	/* unsafe flag */
-	MLZ_FALSE
+	MLZ_FALSE,
+	/* stream header flag */
+	MLZ_TRUE
 };
 
 mlz_in_stream *
@@ -152,37 +154,70 @@ mlz_in_stream_open(
 	mlz_byte       *buf;
 	mlz_in_stream  *ins;
 	mlz_int         context_size, reserve;
+	mlz_int         block_size;
+	mlz_bool        use_header;
+	mlz_byte        hdr[2];
 
-	MLZ_RET_FALSE(params);
+	hdr[0] = hdr[1] = 0;
+
+	/* params and read function test */
+	MLZ_RET_FALSE(params && params->read_func);
+
+	block_size = params->block_size;
+	use_header = params->use_header;
+
+	if (use_header) {
+		/* simple 2-byte block header                */
+		/* bits 4-0: log2(block_size)                */
+		/* bit 5   : independent                     */
+		/* bit 6   : use block checksum (adler32)    */
+		/* bit 7   : use incremental chsum (adler32) */
+		/* 2nd byte = ~hdr (validation)              */
+		MLZ_RET_FALSE(params->read_func(params->handle, hdr, 2) == 2);
+		MLZ_RET_FALSE(hdr[0] == (mlz_byte)~hdr[1]);
+		block_size = (mlz_int)1 << (hdr[0] & 31);
+	}
+
 	/* block size test */
-	MLZ_RET_FALSE(params->block_size >= MLZ_MIN_BLOCK_SIZE && params->block_size < MLZ_MAX_BLOCK_SIZE);
+	MLZ_RET_FALSE(block_size >= MLZ_MIN_BLOCK_SIZE && block_size < MLZ_MAX_BLOCK_SIZE);
 	/* power of two test */
-	MLZ_RET_FALSE(!((mlz_uint)params->block_size & ((mlz_uint)params->block_size)-1));
-	/* read function test */
-	MLZ_RET_FALSE(params->read_func);
+	MLZ_RET_FALSE(!((mlz_uint)block_size & ((mlz_uint)block_size)-1));
 
 	ins = (mlz_in_stream *)mlz_malloc(sizeof(mlz_in_stream));
 	MLZ_RET_FALSE(ins);
 
-	context_size = MLZ_BLOCK_CONTEXT_SIZE;
-	if (context_size < params->block_size)
-		context_size = params->block_size;
+	ins->params = *params;
+	if (use_header) {
+		ins->params.block_size           = block_size;
+		ins->params.independent_blocks   = (hdr[0] & 0x20) != 0;
+		ins->params.block_checksum       = MLZ_NULL;
+		ins->params.incremental_checksum = MLZ_NULL;
+		if ((hdr[0] & 0x40) != 0)
+			ins->params.block_checksum = mlz_adler32_simple;
+		if ((hdr[0] & 0x80) != 0)
+			ins->params.incremental_checksum = mlz_adler32;
+		/* adler32 init */
+		ins->params.initial_checksum = 1;
+	}
 
-	if (params->independent_blocks)
+	context_size = MLZ_BLOCK_CONTEXT_SIZE;
+	if (context_size < block_size)
+		context_size = block_size;
+
+	if (ins->params.independent_blocks)
 		context_size = 0;
 
 	// in-place decompress reserve (max inflation is 1 bit per byte)
-	reserve = params->block_size/8 + MLZ_ACCUM_BYTES + 7;
+	reserve = block_size/8 + MLZ_ACCUM_BYTES + 7;
 
-	ins->buffer = buf = (mlz_byte *)mlz_malloc(context_size + params->block_size + reserve);
+	ins->buffer = buf = (mlz_byte *)mlz_malloc(context_size + block_size + reserve);
 	if (!buf) {
 		mlz_free(ins);
 		return MLZ_NULL;
 	}
 
-	ins->params        = *params;
-	ins->checksum      = params->initial_checksum;
-	ins->block_size    = params->block_size;
+	ins->checksum      = ins->params.initial_checksum;
+	ins->block_size    = block_size;
 	ins->block_reserve = reserve;
 	ins->context_size  = context_size;
 	ins->ptr           = MLZ_NULL;
@@ -335,6 +370,8 @@ mlz_in_stream_rewind(
 	mlz_in_stream *stream
 )
 {
+	mlz_byte hdr[2];
+
 	MLZ_RET_FALSE(stream);
 
 	if (stream->first_cached) {
@@ -351,7 +388,10 @@ mlz_in_stream_rewind(
 	stream->is_eof       = MLZ_FALSE;
 	stream->first_block  = MLZ_TRUE;
 	stream->first_cached = MLZ_FALSE;
-	return MLZ_TRUE;
+
+	/* skip header if necessary */
+	return stream->params.use_header ?
+		stream->params.read_func(stream->params.handle, hdr, 2) == 2 : MLZ_TRUE;
 }
 
 mlz_bool

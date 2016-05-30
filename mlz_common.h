@@ -89,7 +89,7 @@ typedef unsigned long uintptr_t;
 	typedef signed   __int32 mlz_int;
 	typedef unsigned __int64 mlz_ulong;
 	typedef signed   __int64 mlz_long;
-#	if defined(__clang__) || defined(__GNUC__)
+#	if defined(__clang__) || defined(__GNUC__) || defined(__POCC__)
 #		include <stdint.h>
 #	endif
 #else
