@@ -31,6 +31,7 @@
 #define MLZ_STREAM_ENC_H
 
 #include "mlz_stream_common.h"
+#include "mlz_thread.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,6 +59,11 @@ typedef struct
 	mlz_int              level;
 	mlz_int              num_threads;
 	mlz_bool             first_block;
+
+#if defined(MLZ_THREADS)
+	mlz_mutex            mutex;
+#endif
+
 } mlz_out_stream;
 
 /* level = compression level, 0 = fastest, 10 = best */

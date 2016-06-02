@@ -87,6 +87,7 @@ typedef struct
 {
 	mlz_job_proc job;
 	void        *param;
+	int          idx;
 } mlz_job;
 
 struct mlz_jobs;
@@ -97,7 +98,6 @@ typedef struct
 	mlz_job          job;
 	mlz_thread       thread;
 	mlz_event        event;
-	int              idx;
 	mlz_bool         stop;
 	mlz_bool         active;
 } mlz_job_thread;
@@ -106,6 +106,7 @@ typedef struct mlz_jobs
 {
 	int            num_threads;
 	int            active_threads;
+	mlz_bool       running;
 	mlz_mutex      mutex;
 	mlz_event      queue_done_event;
 	mlz_job_thread thread[1];

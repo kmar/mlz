@@ -1,4 +1,4 @@
-mini-LZ library (mlz) v0.2c
+mini-LZ library (mlz) v0.2d
 (c) Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C
@@ -22,6 +22,7 @@ simple example streaming commandline tool in mlzc.c (just define MLZ_COMMANDLINE
 
 streaming compression can be multithreaded now (define MLZ_THREADS),
 but speedup is lousy (~2.5x with 4 cores)
+streaming decompression of independent blocks can be multithreaded now as well
 
 for basic block codec, the following files will do:
 mlz_common.h

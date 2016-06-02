@@ -153,7 +153,7 @@ mlz_in_stream_open(
 {
 	mlz_byte       *buf;
 	mlz_in_stream  *ins;
-	mlz_int         context_size, reserve;
+	mlz_int         context_size, reserve, num_threads;
 	mlz_int         block_size;
 	mlz_bool        use_header;
 	mlz_byte        hdr[2];
@@ -186,6 +186,14 @@ mlz_in_stream_open(
 	ins = (mlz_in_stream *)mlz_malloc(sizeof(mlz_in_stream));
 	MLZ_RET_FALSE(ins);
 
+#if defined(MLZ_THREADS)
+	ins->mutex = mlz_mutex_create();
+	if (!ins->mutex) {
+		mlz_free(ins);
+		return MLZ_NULL;
+	}
+#endif
+
 	ins->params = *params;
 	if (use_header) {
 		ins->params.block_size           = block_size;
@@ -204,22 +212,48 @@ mlz_in_stream_open(
 	if (context_size < block_size)
 		context_size = block_size;
 
-	if (ins->params.independent_blocks)
+	num_threads = 1;
+
+	if (ins->params.independent_blocks) {
 		context_size = 0;
+#if defined(MLZ_THREADS)
+		if (params->jobs) {
+			num_threads += params->jobs->num_threads;
+			if (num_threads < 1 || num_threads > MLZ_MAX_THREADS) {
+				(void)mlz_mutex_destroy(ins->mutex);
+				mlz_free(ins);
+				return MLZ_NULL;
+			}
+		}
+#endif
+	}
 
-	// in-place decompress reserve (max inflation is 1 bit per byte)
-	reserve = block_size/8 + MLZ_ACCUM_BYTES + 7;
+	/* in-place decompress reserve (max inflation is 1 bit per byte) */
+	reserve = block_size/8 + MLZ_CACHELINE_ALIGN;
 
-	ins->buffer = buf = (mlz_byte *)mlz_malloc(context_size + block_size + reserve);
+	ins->buffer_unaligned = buf = (mlz_byte *)mlz_malloc(context_size + (block_size + reserve)*num_threads + MLZ_CACHELINE_ALIGN-1);
 	if (!buf) {
+#if defined(MLZ_THREADS)
+		(void)mlz_mutex_destroy(ins->mutex);
+#endif
 		mlz_free(ins);
 		return MLZ_NULL;
 	}
+
+	buf = (mlz_byte *)((mlz_uintptr)buf & ~((mlz_uintptr)MLZ_CACHELINE_ALIGN-1));
+	if (buf < ins->buffer_unaligned)
+		buf += MLZ_CACHELINE_ALIGN;
+
+	MLZ_ASSERT(buf >= ins->buffer_unaligned);
+	ins->buffer = buf;
 
 	ins->checksum      = ins->params.initial_checksum;
 	ins->block_size    = block_size;
 	ins->block_reserve = reserve;
 	ins->context_size  = context_size;
+	ins->num_threads   = num_threads;
+	ins->current_block = 0;
+	ins->num_blocks    = 0;
 	ins->ptr           = MLZ_NULL;
 	ins->top           = MLZ_NULL;
 	ins->is_eof        = MLZ_FALSE;
@@ -237,81 +271,130 @@ static mlz_bool mlz_read_little_endian(mlz_in_stream *stream, mlz_uint *val)
 	return MLZ_TRUE;
 }
 
+static void mlz_decompress_block_job(int thread, void *param)
+{
+	mlz_in_stream *stream = (mlz_in_stream *)param;
+
+	mlz_int blk_ofs  = thread * (stream->block_size + stream->block_reserve);
+	mlz_byte *target = stream->block_targets[thread];
+	mlz_int blk_size = stream->blk_sizes[thread];
+
+	if (!stream->unc_blocks[thread]) {
+		mlz_int usize = stream->usizes[thread];
+		/* and finally: decompress (in-place) */
+		size_t dlen = stream->params.unsafe ?
+			mlz_decompress_unsafe(stream->buffer + stream->context_size + blk_ofs, target,
+			blk_size)
+			: mlz_decompress(stream->buffer + stream->context_size + blk_ofs, usize, target,
+				blk_size, stream->context_size * (stream->first_block != MLZ_TRUE));
+#if defined(MLZ_THREADS)
+		(void)mlz_mutex_lock(stream->mutex);
+		stream->dlens[thread] = dlen;
+		(void)mlz_mutex_unlock(stream->mutex);
+#else
+		stream->dlens[thread] = dlen;
+#endif
+	}
+}
+
 static mlz_bool
 mlz_in_stream_read_block(mlz_in_stream *stream)
 {
 	mlz_uint  blk_size;
 	mlz_uint  usize;
-	mlz_bool  partial, uncompressed;
-	mlz_int   target_pos;
+	mlz_int   i;
 	mlz_byte *target;
 	mlz_uint  block_checksum = 0;
+	mlz_int   in_blocks = 0;
 
-	MLZ_RET_FALSE(mlz_read_little_endian(stream, &blk_size));
+	stream->current_block = 0;
+	stream->num_blocks    = 0;
 
-	partial      = (blk_size & MLZ_PARTIAL_BLOCK_MASK) != 0;
-	uncompressed = (blk_size & MLZ_UNCOMPRESSED_BLOCK_MASK) != 0;
+	blk_size = 0;
+	for (i=0; i<stream->num_threads; i++) {
+		mlz_bool  partial, uncompressed;
+		mlz_int   target_pos;
+		mlz_int   blk_ofs = i*(stream->block_size + stream->block_reserve);
 
-	blk_size &= MLZ_BLOCK_LEN_MASK;
+		MLZ_RET_FALSE(mlz_read_little_endian(stream, &blk_size));
 
-	MLZ_RET_FALSE(blk_size <= (mlz_uint)stream->block_size);
+		partial      = (blk_size & MLZ_PARTIAL_BLOCK_MASK) != 0;
+		uncompressed = (blk_size & MLZ_UNCOMPRESSED_BLOCK_MASK) != 0;
 
-	if (blk_size == 0) {
-		if (!stream->params.unsafe && stream->params.incremental_checksum) {
-			mlz_uint checksum;
-			MLZ_RET_FALSE(mlz_read_little_endian(stream, &checksum) &&
-				checksum == stream->checksum);
-		}
-		stream->ptr = stream->top = MLZ_NULL;
-		stream->is_eof = MLZ_TRUE;
-		return MLZ_TRUE;
+		blk_size &= MLZ_BLOCK_LEN_MASK;
+
+		MLZ_RET_FALSE(blk_size <= (mlz_uint)stream->block_size);
+
+		if (blk_size == 0)
+			break;
+
+		usize = stream->block_size;
+
+		/* load block checksum if needed */
+		if (stream->params.block_checksum)
+			MLZ_RET_FALSE(mlz_read_little_endian(stream, &block_checksum));
+
+		if (partial)
+			MLZ_RET_FALSE(mlz_read_little_endian(stream, &usize) &&
+				usize > 0 && usize <= (mlz_uint)stream->block_size);
+
+		target_pos = stream->context_size + blk_ofs + (stream->block_size + stream->block_reserve) - blk_size;
+		/* make sure buffer is aligned, we have reserve anyway */
+		target_pos &= ~(mlz_uintptr)7;
+
+		target = stream->buffer + target_pos;
+		if (uncompressed)
+			/* special handling of uncompressed blocks */
+			target = stream->buffer + stream->context_size + blk_ofs;
+
+		stream->blk_sizes[in_blocks]       = blk_size;
+		stream->usizes[in_blocks]          = usize;
+		stream->unc_blocks[in_blocks]      = uncompressed;
+		stream->block_targets[in_blocks++] = target;
+
+		MLZ_RET_FALSE(stream->params.read_func(stream->params.handle, target,
+			(mlz_intptr)blk_size) == (mlz_intptr)blk_size);
+
+		/* validate compressed checksum */
+		if (!stream->params.unsafe && stream->params.block_checksum)
+			MLZ_RET_FALSE(stream->params.block_checksum(target, blk_size) == block_checksum);
 	}
 
-	usize = stream->block_size;
-
-	/* load block checksum if needed */
-	if (stream->params.block_checksum) {
-		MLZ_RET_FALSE(mlz_read_little_endian(stream, &block_checksum));
+#if defined(MLZ_THREADS)
+	for (i=1; i<in_blocks; i++) {
+		mlz_job job;
+		if (stream->unc_blocks[i])
+			continue;
+		job.param = stream;
+		job.job = mlz_decompress_block_job;
+		job.idx = i;
+		MLZ_RET_FALSE(mlz_jobs_enqueue(stream->params.jobs, job));
 	}
-
-	if (partial)
-		MLZ_RET_FALSE(mlz_read_little_endian(stream, &usize) &&
-			usize > 0 && usize <= (mlz_uint)stream->block_size);
-
-	target_pos = stream->context_size + stream->block_size + stream->block_reserve - blk_size;
-	/* make sure buffer is aligned, we have reserve anyway */
-	target_pos &= ~(mlz_uintptr)7;
-
-	target = stream->buffer + target_pos;
-	if (uncompressed)
-		/* special handling of uncompressed blocks */
-		target = stream->buffer + stream->context_size;
-
-	MLZ_RET_FALSE(stream->params.read_func(stream->params.handle, target,
-		(mlz_intptr)blk_size) == (mlz_intptr)blk_size);
-
-	/* validate compressed checksum */
-	if (!stream->params.unsafe && stream->params.block_checksum)
-		MLZ_RET_FALSE(stream->params.block_checksum(target, blk_size) == block_checksum);
+#endif
+	/* this thread helps too */
+	mlz_decompress_block_job(0, stream);
+#if defined(MLZ_THREADS)
+	MLZ_RET_FALSE(in_blocks < 2 || mlz_jobs_wait(stream->params.jobs));
+#endif
 
 	stream->ptr = stream->buffer + stream->context_size;
 
-	if (!uncompressed) {
-		/* and finally: decompress (in-place) */
-		size_t dlen = stream->params.unsafe ?
-			mlz_decompress_unsafe(stream->buffer + stream->context_size, target,
-			blk_size)
-			: mlz_decompress(stream->buffer + stream->context_size, usize, target,
-				blk_size, stream->block_size * (stream->first_block != MLZ_TRUE));
-		MLZ_RET_FALSE(dlen == (size_t)usize);
+	for (i=0; i<in_blocks; i++) {
+		mlz_int ofs = (stream->block_size + stream->block_reserve)*i;
+		usize = stream->usizes[i];
+
+		/* handle decompression errors now */
+		if (!stream->unc_blocks[i] && stream->dlens[i] != (size_t)usize)
+			return MLZ_FALSE;
+
+		/* compute incremental checksum if needed */
+		if (stream->params.incremental_checksum)
+			stream->checksum =
+				stream->params.incremental_checksum(stream->buffer + stream->context_size + ofs,
+					usize, stream->checksum);
 	}
 
-	/* compute incremental checksum if needed */
-	if (stream->params.incremental_checksum)
-		stream->checksum =
-			stream->params.incremental_checksum(stream->buffer + stream->context_size,
-				usize, stream->checksum);
-
+	usize = stream->usizes[0];
 	stream->top = stream->ptr + usize;
 
 	/* copy context */
@@ -320,6 +403,19 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 
 	stream->first_cached = stream->first_block;
 	stream->first_block  = MLZ_FALSE;
+
+	stream->num_blocks   = in_blocks;
+
+	if (blk_size == 0) {
+		if (!stream->params.unsafe && stream->params.incremental_checksum) {
+			mlz_uint checksum;
+			MLZ_RET_FALSE(mlz_read_little_endian(stream, &checksum) &&
+				checksum == stream->checksum);
+		}
+		stream->is_eof = MLZ_TRUE;
+		if (in_blocks == 0)
+			stream->ptr = stream->top = MLZ_NULL;
+	}
 
 	return MLZ_TRUE;
 }
@@ -340,6 +436,13 @@ mlz_stream_read(
 		mlz_intptr to_fill, capacity;
 
 		if (MLZ_UNLIKELY(stream->ptr >= stream->top)) {
+			if (++stream->current_block < stream->num_blocks) {
+				/* jump to next block */
+				stream->ptr = stream->buffer + stream->context_size +
+					stream->current_block * (stream->block_size + stream->block_reserve);
+				stream->top = stream->ptr + stream->usizes[stream->current_block];
+				continue;
+			}
 			if (stream->is_eof)
 				break;
 
@@ -354,10 +457,12 @@ mlz_stream_read(
 			to_fill = capacity;
 
 		if (to_fill > 0) {
-			memcpy(db, stream->ptr, to_fill);
+			if (db) {
+				memcpy(db, stream->ptr, to_fill);
+				db += to_fill;
+			}
 			stream->ptr += to_fill;
 			size        -= to_fill;
-			db          += to_fill;
 			nread       += to_fill;
 		}
 	}
@@ -376,7 +481,8 @@ mlz_in_stream_rewind(
 
 	if (stream->first_cached) {
 		/* fast rewind */
-		stream->ptr = stream->buffer + stream->context_size;
+		stream->ptr           = stream->buffer + stream->context_size;
+		stream->current_block = 0;
 		return MLZ_TRUE;
 	}
 
@@ -404,7 +510,11 @@ mlz_in_stream_close(
 	if (stream->params.close_func)
 		MLZ_RET_FALSE(stream->params.close_func(stream->params.handle));
 
-	mlz_free(stream->buffer);
+#if defined(MLZ_THREADS)
+	MLZ_RET_FALSE(mlz_mutex_destroy(stream->mutex));
+#endif
+
+	mlz_free(stream->buffer_unaligned);
 	mlz_free(stream);
 	return MLZ_TRUE;
 }

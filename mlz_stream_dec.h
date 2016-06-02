@@ -31,16 +31,18 @@
 #define MLZ_STREAM_DEC_H
 
 #include "mlz_stream_common.h"
+#include "mlz_thread.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* TODO?: come up with multithreaded interface for streaming decompression of independent blocks */
 typedef struct
 {
 	/* 64k previous context, nk block size, nkb unpack reserve */
 	mlz_byte            *buffer;
+	/* original unaligned buffer ptr */
+	mlz_byte            *buffer_unaligned;
 	MLZ_CONST mlz_byte  *ptr;
 	MLZ_CONST mlz_byte  *top;
 	mlz_stream_params    params;
@@ -48,10 +50,27 @@ typedef struct
 	mlz_int              block_size;
 	mlz_int              block_reserve;
 	mlz_int              context_size;
+
+	/* only valid for independent blocks */
+	mlz_int              num_threads;
+	mlz_int              current_block;
+	mlz_int              num_blocks;
+	/* helpers for multi-threaded block decompression */
+	mlz_byte            *block_targets[MLZ_MAX_THREADS];
+	mlz_int              blk_sizes    [MLZ_MAX_THREADS];
+	mlz_bool             unc_blocks   [MLZ_MAX_THREADS];
+	mlz_int              usizes       [MLZ_MAX_THREADS];
+	size_t               dlens        [MLZ_MAX_THREADS];
+
 	mlz_bool             is_eof;
 	mlz_bool             first_block;
 	/* first block cached? allows fast rewind early */
 	mlz_bool             first_cached;
+
+#if defined(MLZ_THREADS)
+	mlz_mutex            mutex;
+#endif
+
 } mlz_in_stream;
 
 /* simple adler32 checksum (Mark Adler's Fletcher variant) */

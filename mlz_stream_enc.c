@@ -29,7 +29,6 @@
 
 #include "mlz_stream_enc.h"
 #include "mlz_enc.h"
-#include "mlz_thread.h"
 #include <string.h>
 
 static mlz_bool mlz_out_stream_free(mlz_out_stream *stream)
@@ -37,6 +36,10 @@ static mlz_bool mlz_out_stream_free(mlz_out_stream *stream)
 	mlz_int i;
 	for (i=0; i<stream->num_threads; i++)
 		MLZ_RET_FALSE(mlz_matcher_free(stream->matchers[i]));
+
+#if defined(MLZ_THREADS)
+	MLZ_RET_FALSE(mlz_mutex_destroy(stream->mutex));
+#endif
 
 	mlz_free(stream->buffer_unaligned);
 	mlz_free(stream);
@@ -67,6 +70,12 @@ mlz_out_stream_open(
 	MLZ_RET_FALSE(outs);
 	memset(outs, 0, sizeof(mlz_out_stream));
 
+#if defined(MLZ_THREADS)
+	outs->mutex = mlz_mutex_create();
+	if (!outs->mutex)
+		goto out_stream_error;
+#endif
+
 	context_size = MLZ_BLOCK_CONTEXT_SIZE;
 	if (params->block_size < context_size)
 		context_size = params->block_size;
@@ -77,7 +86,8 @@ mlz_out_stream_open(
 #if defined(MLZ_THREADS)
 	if (params->jobs)
 		num_threads += params->jobs->num_threads;
-	MLZ_RET_FALSE(num_threads > 0 && num_threads <= MLZ_MAX_THREADS);
+	if (num_threads < 1 || num_threads > MLZ_MAX_THREADS)
+		goto out_stream_error;
 #endif
 
 	outs->buffer_unaligned = (mlz_byte *)mlz_malloc(context_size + params->block_size*2*num_threads + MLZ_CACHELINE_ALIGN-1);
@@ -154,15 +164,12 @@ static mlz_bool mlz_write_little_endian(mlz_out_stream *stream, mlz_uint val)
 	return stream->params.write_func(stream->params.handle, buf, 4) == 4;
 }
 
-#if defined(MLZ_THREADS)
 static void mlz_compress_block_job(int thread, void *param)
 {
 	mlz_int ptr;
+	size_t  out_len;
 	mlz_out_stream *stream = (mlz_out_stream *)param;
 	mlz_int num_sub_blocks = (stream->ptr + stream->block_size-1)/stream->block_size;
-
-	/* add 1 because jobs are just helpers to calling thread */
-	++thread;
 
 	if (thread < num_sub_blocks-1)
 		ptr = stream->block_size;
@@ -170,7 +177,7 @@ static void mlz_compress_block_job(int thread, void *param)
 		ptr = stream->ptr - thread*stream->block_size;
 
 	/* flush (compress) */
-	stream->out_lens[thread] = mlz_compress(
+	out_len = mlz_compress(
 		stream->matchers[thread],
 		stream->out_buffer + thread*stream->block_size,
 		stream->block_size,
@@ -179,11 +186,18 @@ static void mlz_compress_block_job(int thread, void *param)
 		stream->context_size,
 		stream->level
 	);
-}
+#if defined(MLZ_THREADS)
+	(void)mlz_mutex_lock(stream->mutex);
+	stream->out_lens[thread] = out_len;
+	(void)mlz_mutex_unlock(stream->mutex);
+#else
+	stream->out_lens[thread] = out_len;
 #endif
+}
 
 static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 {
+	size_t out_len;
 	mlz_int i, num_sub_blocks;
 
 	MLZ_ASSERT(stream);
@@ -195,17 +209,18 @@ static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 
 #if defined(MLZ_THREADS)
 	if (stream->params.jobs) {
-		for (i=0; i<num_sub_blocks-1; i++) {
+		for (i=1; i<num_sub_blocks; i++) {
 			mlz_job job;
 			job.job   = mlz_compress_block_job;
 			job.param = stream;
+			job.idx   = i;
 			MLZ_RET_FALSE(mlz_jobs_enqueue(stream->params.jobs, job));
 		}
 	}
 #endif
 
 	/* flush (compress) */
-	stream->out_lens[0] = mlz_compress(
+	out_len = mlz_compress(
 		stream->matchers[0],
 		stream->out_buffer,
 		stream->block_size,
@@ -219,6 +234,8 @@ static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 	if (stream->params.jobs)
 		MLZ_RET_FALSE(mlz_jobs_wait(stream->params.jobs));
 #endif
+
+	stream->out_lens[0] = out_len;
 
 	stream->first_block = MLZ_FALSE;
 

@@ -364,12 +364,14 @@ static void mlz_job_worker_proc(void *param)
 		if (jt->stop)
 			break;
 		MLZ_ASSERT(jt->job.job);
-		jt->job.job(jt->idx, jt->job.param);
+		jt->job.job(jt->job.idx, jt->job.param);
 
 		(void)mlz_mutex_lock(jobs->mutex);
+		MLZ_ASSERT(jt->active);
 		jt->active = MLZ_FALSE;
 		if (!--jobs->active_threads)
 			(void)mlz_event_set(jobs->queue_done_event);
+
 		(void)mlz_mutex_unlock(jobs->mutex);
 	}
 }
@@ -397,7 +399,6 @@ mlz_jobs mlz_jobs_create(int num_threads)
 	for (i=0; i<num_threads; i++) {
 		mlz_job_thread *jt = res->thread + i;
 		jt->jobs = res;
-		jt->idx  = i;
 		jt->event = mlz_event_create();
 		jt->thread = mlz_thread_create();
 
@@ -453,7 +454,11 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 
 	MLZ_RET_FALSE(jobs && job.job);
 
+	if (!jobs->running)
+		MLZ_RET_FALSE(mlz_event_reset(jobs->queue_done_event));
+
 	MLZ_RET_FALSE(mlz_mutex_lock(jobs->mutex));
+
 	i   = jobs->active_threads;
 	num = jobs->num_threads;
 	if (i < num) {
@@ -462,21 +467,28 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 		while (jt->active)
 			++jt;
 
+		MLZ_ASSERT(jt - jobs->thread < num);
+
 		++jobs->active_threads;
 		jt->active = MLZ_TRUE;
 		jt->job    = job;
 
-		if (!mlz_event_set(jt->event) || !mlz_event_reset(jobs->queue_done_event))
+		if (!mlz_event_set(jt->event))
 			/* force to fail */
 			i = num;
-
+		else
+			jobs->running = MLZ_TRUE;
 	}
 	return mlz_mutex_unlock(jobs->mutex) && i < num;
 }
 
 mlz_bool mlz_jobs_wait(mlz_jobs jobs)
 {
-	return jobs && mlz_event_wait(jobs->queue_done_event);
+	mlz_bool res;
+	MLZ_RET_FALSE(jobs);
+	res = !jobs->running || mlz_event_wait(jobs->queue_done_event);
+	jobs->running = MLZ_FALSE;
+	return res;
 }
 
 #endif

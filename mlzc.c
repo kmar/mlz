@@ -277,7 +277,10 @@ static int process(void)
 		if (block_checksum)
 			par.block_checksum = mlz_adler32_simple;
 		if (raw)
-			par.use_header = MLZ_FALSE;
+			par.use_header     = MLZ_FALSE;
+#if defined(MLZ_THREADS)
+		par.jobs               = jobs;
+#endif
 
 		ins = mlz_in_stream_open(&par);
 		if (!ins) {
