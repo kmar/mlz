@@ -240,7 +240,7 @@ static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 	stream->first_block = MLZ_FALSE;
 
 	for (i=0; i<num_sub_blocks; i++) {
-		size_t out_len, real_out_len;
+		size_t real_out_len;
 		mlz_int ptr;
 		mlz_bool partial_block     = MLZ_FALSE;
 		mlz_byte *out_ptr          = stream->out_buffer + i*stream->block_size;
