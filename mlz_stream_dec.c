@@ -209,7 +209,7 @@ mlz_in_stream_open(
 	}
 
 	context_size = MLZ_BLOCK_CONTEXT_SIZE;
-	if (context_size < block_size)
+	if (context_size > block_size)
 		context_size = block_size;
 
 	num_threads = 1;
