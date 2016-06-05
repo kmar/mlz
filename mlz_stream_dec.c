@@ -255,18 +255,19 @@ mlz_in_stream_open(
 	MLZ_ASSERT(buf >= ins->buffer_unaligned);
 	ins->buffer = buf;
 
-	ins->checksum      = ins->params.initial_checksum;
-	ins->block_size    = block_size;
-	ins->block_reserve = reserve;
-	ins->context_size  = context_size;
-	ins->num_threads   = num_threads;
-	ins->current_block = 0;
-	ins->num_blocks    = 0;
-	ins->ptr           = MLZ_NULL;
-	ins->top           = MLZ_NULL;
-	ins->is_eof        = MLZ_FALSE;
-	ins->first_block   = MLZ_TRUE;
-	ins->first_cached  = MLZ_FALSE;
+	ins->checksum        = ins->params.initial_checksum;
+	ins->block_size      = block_size;
+	ins->block_reserve   = reserve;
+	ins->context_size    = context_size;
+	ins->next_block_size = 0;
+	ins->num_threads     = num_threads;
+	ins->current_block   = 0;
+	ins->num_blocks      = 0;
+	ins->ptr             = MLZ_NULL;
+	ins->top             = MLZ_NULL;
+	ins->is_eof          = MLZ_FALSE;
+	ins->first_block     = MLZ_TRUE;
+	ins->first_cached    = MLZ_FALSE;
 	return ins;
 }
 
@@ -324,7 +325,12 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		mlz_int   target_pos;
 		mlz_int   blk_ofs = i*(stream->block_size + stream->block_reserve);
 
-		MLZ_RET_FALSE(mlz_read_little_endian(stream, &blk_size));
+		if (stream->next_block_size) {
+			blk_size = stream->next_block_size;
+			stream->next_block_size = 0;
+		} else {
+			MLZ_RET_FALSE(mlz_read_little_endian(stream, &blk_size));
+		}
 
 		partial      = (blk_size & MLZ_PARTIAL_BLOCK_MASK) != 0;
 		uncompressed = (blk_size & MLZ_UNCOMPRESSED_BLOCK_MASK) != 0;
@@ -414,6 +420,15 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 
 	stream->num_blocks   = in_blocks;
 
+	if (blk_size) {
+		/* precache next block size to see if it's last block, this is important for checksum verification */
+		mlz_uint next_blk_size;
+		MLZ_RET_FALSE(mlz_read_little_endian(stream, &next_blk_size));
+		stream->next_block_size = next_blk_size;
+		if (MLZ_UNLIKELY(!next_blk_size))
+			blk_size = 0;
+	}
+
 	if (blk_size == 0) {
 		if (!stream->params.unsafe && stream->params.incremental_checksum) {
 			mlz_uint checksum;
@@ -496,12 +511,13 @@ mlz_in_stream_rewind(
 
 	MLZ_RET_FALSE(stream->params.rewind_func && stream->params.rewind_func(stream->params.handle));
 
-	stream->ptr          = MLZ_NULL;
-	stream->top          = MLZ_NULL;
-	stream->checksum     = stream->params.initial_checksum;
-	stream->is_eof       = MLZ_FALSE;
-	stream->first_block  = MLZ_TRUE;
-	stream->first_cached = MLZ_FALSE;
+	stream->ptr             = MLZ_NULL;
+	stream->top             = MLZ_NULL;
+	stream->checksum        = stream->params.initial_checksum;
+	stream->is_eof          = MLZ_FALSE;
+	stream->first_block     = MLZ_TRUE;
+	stream->first_cached    = MLZ_FALSE;
+	stream->next_block_size = 0;
 
 	/* skip header if necessary */
 	return stream->params.use_header ?

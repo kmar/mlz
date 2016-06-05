@@ -50,6 +50,8 @@ typedef struct
 	mlz_int              block_size;
 	mlz_int              block_reserve;
 	mlz_int              context_size;
+	/* precaching because of incremental checksum */
+	mlz_uint             next_block_size;
 
 	/* only valid for independent blocks */
 	mlz_int              num_threads;
