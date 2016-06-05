@@ -542,3 +542,11 @@ mlz_in_stream_close(
 	mlz_free(stream);
 	return MLZ_TRUE;
 }
+
+mlz_bool
+mlz_in_stream_eof(
+	mlz_in_stream *stream
+)
+{
+	return stream && stream->is_eof;
+}

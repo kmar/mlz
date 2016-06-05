@@ -116,6 +116,14 @@ mlz_in_stream_close(
 	mlz_in_stream *stream
 );
 
+/* returns MLZ_TRUE if EOF (EOS)                                              */
+/* if you're using incremental checksum and read exactly original size bytes, */
+/* use this to make sure checksum was checked (EOF == true)                   */
+MLZ_API mlz_bool
+mlz_in_stream_eof(
+	mlz_in_stream *stream
+);
+
 #ifdef __cplusplus
 }
 #endif
