@@ -1,4 +1,4 @@
-mini-LZ library (mlz) v0.2e
+mini-LZ library (mlz) v0.2f
 (c) Martin Sedlak 2016
 
 a simple, portable LZ-only codec written in plain C
@@ -7,7 +7,8 @@ distributed under Boost software license
 
 performance on Silesia corpus (single ~207MB block) on my i7:
 compression (max level): 4-5MB/sec (thus very slow)
-decompression: ~400-500MB/sec (heavily depends on compiler optimizer) (reasonably fast)
+decompression: ~600-700MB/sec (heavily depends on compiler optimizer)
+               (reasonably fast but 3x slower than LZ4)
 compressed size: ~71MB (worse than zlib but still relatively good)
 
 (note: assuming MB = 1024^2 bytes)

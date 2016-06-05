@@ -28,6 +28,7 @@
 */
 
 #include "mlz_dec.h"
+#include <string.h>
 
 #define MLZ_DEC_GUARD_MASK (1u << MLZ_ACCUM_BITS)
 #define MLZ_DEC_0BIT_MASK  ~1u
@@ -95,23 +96,29 @@
 #define MLZ_GET_SHORT_LEN_FAST(res) MLZ_GET_SHORT_LEN_COMMON(res, MLZ_GET_BIT_FAST)
 
 #define MLZ_COPY_MATCH_UNSAFE() \
-	chlen = len >> 2; \
-	len &= 3; \
+	chlen = (len+7) >> 3; \
+	len &= 7; \
 	dist = -dist; \
-	\
-	while (chlen-- > 0) { \
-		*db = db[dist]; db++; \
-		*db = db[dist]; db++; \
-		*db = db[dist]; db++; \
-		*db = db[dist]; db++; \
+	if (dist <= -8) { \
+		while (chlen-- > 0) { \
+			memcpy(db, db+dist, 8); db += 8; \
+		} \
+	} else { \
+		while (chlen-- > 0) { \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+		} \
 	} \
-	\
-	while (len-- > 0) { \
-		*db = db[dist]; db++; \
-	}
+	db -= (8-len) & 7;
 
 #define MLZ_COPY_MATCH() \
-	MLZ_RET_FALSE(db - dist >= odblimit && db + len <= de); \
+	MLZ_RET_FALSE(db - dist >= odblimit && db + len + 7 <= de); \
  \
 	MLZ_COPY_MATCH_UNSAFE()
 

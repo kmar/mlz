@@ -32,6 +32,8 @@
 
 /* unsafe (=no bounds checks) minimal all-in-one decompression */
 
+#include <string.h>
+
 #if !defined(MLZ_COMMON_H)
 
 #if !defined(MLZ_API)
@@ -126,25 +128,26 @@ typedef int32_t     mlz_int;
 	}
 
 #define MLZ_COPY_MATCH_UNSAFE() \
-	chlen = len >> 2; \
-	len &= 3; \
+	chlen = (len+7) >> 3; \
+	len &= 7; \
 	dist = -dist; \
-	\
-	while (chlen-- > 0) { \
-		*db = db[dist]; db++; \
-		*db = db[dist]; db++; \
-		*db = db[dist]; db++; \
-		*db = db[dist]; db++; \
+	if (dist <= -8) { \
+		while (chlen-- > 0) { \
+			memcpy(db, db+dist, 8); db += 8; \
+		} \
+	} else { \
+		while (chlen-- > 0) { \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+			*db = db[dist]; db++; \
+		} \
 	} \
-	\
-	while (len-- > 0) { \
-		*db = db[dist]; db++; \
-	}
-
-#define MLZ_COPY_MATCH() \
-	MLZ_RET_FALSE(db - dist >= odblimit && db + len <= de); \
- \
-	MLZ_COPY_MATCH_UNSAFE()
+	db -= (8-len) & 7;
 
 #define MLZ_LITCOPY(db, sb, run) \
 	{ \
@@ -302,7 +305,6 @@ mlz_decompress_mini(
 #undef MLZ_GET_SHORT_LEN_FAST_NOACCUM
 #undef MLZ_GET_SHORT_LEN_FAST
 #undef MLZ_COPY_MATCH_UNSAFE
-#undef MLZ_COPY_MATCH
 #undef MLZ_LITCOPY
 #undef MLZ_LITERAL_RUN_UNSAFE
 #undef MLZ_TINY_MATCH

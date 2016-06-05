@@ -136,7 +136,7 @@ MLZ_INLINE mlz_int mlz_compute_savings(mlz_int dist, mlz_int len)
 	mlz_bool tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << MLZ_SHORT_LEN_BITS);
 	/* note: we don't check for tiny_len && dist < (1 << 13)          */
 	/* here because it has no impact due to the way the matcher works */
-	mlz_int  bit_cost = tiny_len ? 3 + 3 + 8 + 8*(dist > 255) : 3 + 8 + 16 + 16*(len >= 255);
+	mlz_int  bit_cost = tiny_len ? 3 + MLZ_SHORT_LEN_BITS + 8 + 8*(dist > 255) : 3 + 8 + 16 + 16*(len >= 255);
 
 	return 9*len - bit_cost;
 }
@@ -156,8 +156,10 @@ MLZ_INLINE mlz_int mlz_clamp(mlz_int x, mlz_int y, mlz_int z)
 #define MLZ_MATCH_BEST_COMMON \
 	*best_len = i; \
 	best_dist = cyc_dist; \
-	if (i >= max_len) \
+	if (i >= max_len) { \
+		*best_len = max_len; \
 		return best_dist; \
+	}
 
 #define MLZ_MATCH_BEST_SAVINGS \
 	mlz_int save = mlz_compute_savings(cyc_dist, i); \
@@ -475,6 +477,8 @@ mlz_compress(
 	MLZ_CONST mlz_byte *sb = (MLZ_CONST mlz_byte *)src;
 	MLZ_CONST mlz_byte *osb = sb - bytes_before_src;
 	MLZ_CONST mlz_byte *se = sb + src_size;
+	/* we need a reserve for faster decompression so that we can round match length up to 8-bytes */
+	MLZ_CONST mlz_byte *se_match = se - MLZ_LAST_LITERALS;
 	MLZ_CONST mlz_byte *match_start_max = se - MLZ_MIN_MATCH;
 	mlz_byte *db = (mlz_byte *)dst;
 	MLZ_CONST mlz_byte *odb = db;
@@ -518,12 +522,12 @@ mlz_compress(
 		mlz_int best_savings = -1;
 		mlz_int best_len = 0;
 		mlz_int max_dist = mlz_min(MLZ_MAX_DIST,  (mlz_int)(sb - osb));
-		mlz_int max_len  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se - sb));
+		mlz_int max_len  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se_match - sb));
 
 		/* compute hash at sb */
 		MLZ_HASHBYTE(sb);
 
-		if (!max_dist || max_len < MLZ_MIN_MATCH) {
+		if (!max_dist || max_len < MLZ_MIN_MATCH || sb >= se_match) {
 			mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
 			sb++;
 			continue;
@@ -553,12 +557,12 @@ mlz_compress(
 			mlz_uint ohash = hash;
 			MLZ_CONST mlz_byte *sb2 = sb+lazy_ofs;
 			mlz_int max_dist2 = mlz_min(MLZ_MAX_DIST, (mlz_int)(sb2 - osb));
-			mlz_int max_len2  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se - sb2));
+			mlz_int max_len2  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se_match - sb2));
 
 			/* trying to speed things up using Yann Collet's advanced parsing strategies:                                        */
 			/* just try to look for MINMATCH at P+ML+2-MINMATCH first (helps, in some cases ~15% but in others even 50% speedup) */
 			MLZ_CONST mlz_byte *lazysb = sb + best_len + 2 - MLZ_MIN_MATCH;
-			if (lazysb + MLZ_MIN_MATCH > se)
+			if (lazysb + MLZ_MIN_MATCH > se || sb2 >= se_match)
 				break;
 
 			lmax_dist = mlz_min(MLZ_MAX_DIST, (mlz_int)(lazysb - osb));
