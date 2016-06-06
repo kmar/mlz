@@ -93,7 +93,7 @@ typedef int32_t     mlz_int;
 
 #define MLZ_GET_BIT_FAST(res) \
 	MLZ_GET_BIT_FAST_NOACCUM(res) \
-	if (MLZ_UNLIKELY(!(accum & MLZ_DEC_0BIT_MASK))) { \
+	if (MLZ_UNLIKELY(accum <= 1)) { \
 		MLZ_LOAD_ACCUM() \
 	}
 

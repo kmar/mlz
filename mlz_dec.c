@@ -51,7 +51,7 @@
 
 #define MLZ_GET_BIT_CHECK(res, stmt) \
 	MLZ_GET_BIT_FAST_NOACCUM(res) \
-	if (MLZ_UNLIKELY(!(accum & MLZ_DEC_0BIT_MASK))) { \
+	if (MLZ_UNLIKELY(accum <= 1)) { \
 		stmt \
 		MLZ_LOAD_ACCUM() \
 	}
