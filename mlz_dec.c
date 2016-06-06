@@ -288,6 +288,11 @@ mlz_decompress(
 				/* tiny match */
 				MLZ_GET_SHORT_LEN_FAST_NOACCUM(len)
 				MLZ_TINY_MATCH()
+				if (dist == 0) {
+					/* literal run */
+					MLZ_LITERAL_RUN()
+					continue;
+				}
 			} else if (type == 2) {
 				/* short match */
 				MLZ_SHORT_MATCH()
@@ -298,11 +303,6 @@ mlz_decompress(
 			} else {
 				/* full match */
 				MLZ_FULL_MATCH()
-			}
-			if (dist == 0) {
-				/* literal run */
-				MLZ_LITERAL_RUN()
-				continue;
 			}
 			/* copy match */
 			MLZ_COPY_MATCH()
@@ -318,6 +318,11 @@ mlz_decompress(
 			/* tiny match */
 			MLZ_GET_SHORT_LEN_FAST(len)
 			MLZ_TINY_MATCH()
+			if (dist == 0) {
+				/* literal run */
+				MLZ_LITERAL_RUN()
+				continue;
+			}
 		} else if (type == 2) {
 			/* short match */
 			MLZ_SHORT_MATCH()
@@ -328,11 +333,6 @@ mlz_decompress(
 		} else {
 			/* full match */
 			MLZ_FULL_MATCH()
-		}
-		if (dist == 0) {
-			/* literal run */
-			MLZ_LITERAL_RUN()
-			continue;
 		}
 		/* copy match */
 		MLZ_COPY_MATCH()
@@ -348,6 +348,11 @@ mlz_decompress(
 			/* tiny match */
 			MLZ_GET_SHORT_LEN(len)
 			MLZ_TINY_MATCH_SAFE()
+			if (dist == 0) {
+				/* literal run */
+				MLZ_LITERAL_RUN_SAFE()
+				continue;
+			}
 		} else if (type == 2) {
 			/* short match */
 			MLZ_SHORT_MATCH_SAFE()
@@ -358,11 +363,6 @@ mlz_decompress(
 		} else {
 			/* full match */
 			MLZ_FULL_MATCH_SAFE()
-		}
-		if (dist == 0) {
-			/* literal run */
-			MLZ_LITERAL_RUN_SAFE()
-			continue;
 		}
 		/* copy match */
 		MLZ_COPY_MATCH()
@@ -408,6 +408,11 @@ mlz_decompress_unsafe(
 				/* tiny match */
 				MLZ_GET_SHORT_LEN_FAST_NOACCUM(len)
 				MLZ_TINY_MATCH()
+				if (dist == 0) {
+					/* literal run */
+					MLZ_LITERAL_RUN_UNSAFE()
+					continue;
+				}
 			} else if (type == 2) {
 				/* short match */
 				MLZ_SHORT_MATCH()
@@ -418,11 +423,6 @@ mlz_decompress_unsafe(
 			} else {
 				/* full match */
 				MLZ_FULL_MATCH()
-			}
-			if (dist == 0) {
-				/* literal run */
-				MLZ_LITERAL_RUN_UNSAFE()
-				continue;
 			}
 			/* copy match */
 			MLZ_COPY_MATCH_UNSAFE()
@@ -438,6 +438,11 @@ mlz_decompress_unsafe(
 			/* tiny match */
 			MLZ_GET_SHORT_LEN_FAST(len)
 			MLZ_TINY_MATCH()
+			if (dist == 0) {
+				/* literal run  */
+				MLZ_LITERAL_RUN_UNSAFE()
+				continue;
+			}
 		} else if (type == 2) {
 			/* short match */
 			MLZ_SHORT_MATCH()
@@ -448,11 +453,6 @@ mlz_decompress_unsafe(
 		} else {
 			/* full match */
 			MLZ_FULL_MATCH()
-		}
-		if (dist == 0) {
-			/* literal run  */
-			MLZ_LITERAL_RUN_UNSAFE()
-			continue;
 		}
 		/* copy match */
 		MLZ_COPY_MATCH_UNSAFE()
