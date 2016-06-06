@@ -484,7 +484,6 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 
 		return res;
 	}
-	return mlz_mutex_unlock(jobs->mutex);
 }
 
 mlz_bool mlz_jobs_prepare_batch(
