@@ -455,7 +455,6 @@ mlz_bool mlz_jobs_destroy(mlz_jobs jobs)
 
 mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 {
-	int i, num;
 	mlz_bool set_running = MLZ_FALSE;
 
 	MLZ_RET_FALSE(jobs && job.job);
@@ -467,7 +466,6 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 
 	MLZ_RET_FALSE(mlz_mutex_lock(jobs->mutex));
 
-	num = jobs->num_threads;
 	{
 		mlz_bool res;
 		mlz_job_thread *jt = jobs->thread;
@@ -475,7 +473,7 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 		while (jt->active)
 			++jt;
 
-		MLZ_ASSERT(jt - jobs->thread < num);
+		MLZ_ASSERT(jt - jobs->thread < jobs->num_threads);
 
 		jt->active = MLZ_TRUE;
 		jt->job    = job;
