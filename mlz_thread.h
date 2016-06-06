@@ -116,6 +116,7 @@ typedef struct mlz_jobs
 MLZ_API mlz_jobs mlz_jobs_create (int num_threads);
 /* returns MLZ_FALSE on failure */
 MLZ_API mlz_bool mlz_jobs_destroy(mlz_jobs jobs);
+MLZ_API mlz_bool mlz_jobs_prepare_batch(mlz_jobs jobs, mlz_int num_threads);
 MLZ_API mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job);
 MLZ_API mlz_bool mlz_jobs_wait   (mlz_jobs jobs);
 

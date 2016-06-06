@@ -375,6 +375,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 	}
 
 #if defined(MLZ_THREADS)
+	MLZ_RET_FALSE(!stream->params.jobs || mlz_jobs_prepare_batch(stream->params.jobs, in_blocks-1));
 	for (i=1; i<in_blocks; i++) {
 		mlz_job job;
 		if (stream->unc_blocks[i])

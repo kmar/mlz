@@ -241,6 +241,7 @@ mlz_bool mlz_event_reset(mlz_event event)
 
 mlz_bool mlz_event_set(mlz_event event)
 {
+	mlz_bool res;
 	mlz_event_wrapper *ew;
 	MLZ_RET_FALSE(event);
 
@@ -248,8 +249,8 @@ mlz_bool mlz_event_set(mlz_event event)
 
 	MLZ_RET_FALSE(pthread_mutex_lock(&ew->mutex) == 0);
 	ew->flag = MLZ_TRUE;
-	return pthread_cond_broadcast(&ew->cond) == 0 &&
-	       pthread_mutex_unlock(&ew->mutex)  == 0;
+	res =  pthread_cond_broadcast(&ew->cond) == 0;
+	return pthread_mutex_unlock(&ew->mutex)  == 0 && res;
 }
 
 mlz_bool mlz_event_wait(mlz_event event)
@@ -367,6 +368,8 @@ static void mlz_job_worker_proc(void *param)
 		MLZ_ASSERT(jt->job.job);
 		jt->job.job(jt->job.idx, jt->job.param);
 
+		MLZ_ASSERT(jobs->running);
+
 		(void)mlz_mutex_lock(jobs->mutex);
 		MLZ_ASSERT(jt->active);
 		jt->active = MLZ_FALSE;
@@ -464,9 +467,8 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 
 	MLZ_RET_FALSE(mlz_mutex_lock(jobs->mutex));
 
-	i   = jobs->active_threads;
 	num = jobs->num_threads;
-	if (i < num) {
+	{
 		mlz_bool res;
 		mlz_job_thread *jt = jobs->thread;
 
@@ -475,16 +477,29 @@ mlz_bool mlz_jobs_enqueue(mlz_jobs jobs, mlz_job job)
 
 		MLZ_ASSERT(jt - jobs->thread < num);
 
-		++jobs->active_threads;
 		jt->active = MLZ_TRUE;
 		jt->job    = job;
 
 		res = mlz_mutex_unlock(jobs->mutex) && mlz_event_set(jt->event);
 		if (!res && set_running)
 			jobs->running = MLZ_FALSE;
+
 		return res;
 	}
-	return mlz_mutex_unlock(jobs->mutex) && i < num;
+	return mlz_mutex_unlock(jobs->mutex);
+}
+
+mlz_bool mlz_jobs_prepare_batch(
+	mlz_jobs jobs,
+	mlz_int  num_threads
+)
+{
+	MLZ_RET_FALSE(jobs && mlz_mutex_lock(jobs->mutex));
+
+	MLZ_ASSERT(num_threads >= 0);
+	jobs->active_threads = num_threads;
+
+	return mlz_mutex_unlock(jobs->mutex);
 }
 
 mlz_bool mlz_jobs_wait(mlz_jobs jobs)

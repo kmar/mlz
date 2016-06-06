@@ -209,6 +209,7 @@ static mlz_bool mlz_out_stream_flush_block(mlz_out_stream *stream)
 
 #if defined(MLZ_THREADS)
 	if (stream->params.jobs) {
+		MLZ_RET_FALSE(mlz_jobs_prepare_batch(stream->params.jobs, num_sub_blocks-1));
 		for (i=1; i<num_sub_blocks; i++) {
 			mlz_job job;
 			job.job   = mlz_compress_block_job;
