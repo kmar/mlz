@@ -7,7 +7,7 @@ distributed under Boost software license
 
 performance on Silesia corpus (single ~207MB block) on my i7:
 compression (max level): 4-5MB/sec (thus very slow)
-decompression: ~600-700MB/sec (heavily depends on compiler optimizer)
+decompression: ~500-700MB/sec (heavily depends on compiler optimizer)
                (reasonably fast but 3x slower than LZ4)
 compressed size: ~71MB (worse than zlib but still relatively good)
 
