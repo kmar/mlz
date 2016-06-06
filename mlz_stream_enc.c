@@ -62,7 +62,7 @@ mlz_out_stream_open(
 	/* block size test */
 	MLZ_RET_FALSE(params->block_size >= MLZ_MIN_BLOCK_SIZE && params->block_size < MLZ_MAX_BLOCK_SIZE);
 	/* power of two test */
-	MLZ_RET_FALSE(!((mlz_uint)params->block_size & ((mlz_uint)params->block_size)-1));
+	MLZ_RET_FALSE(!((mlz_uint)params->block_size & ((mlz_uint)params->block_size-1)));
 	/* write function test */
 	MLZ_RET_FALSE(params->write_func);
 

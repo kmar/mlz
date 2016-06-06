@@ -189,7 +189,7 @@ mlz_in_stream_open(
 	/* block size test */
 	MLZ_RET_FALSE(block_size >= MLZ_MIN_BLOCK_SIZE && block_size < MLZ_MAX_BLOCK_SIZE);
 	/* power of two test */
-	MLZ_RET_FALSE(!((mlz_uint)block_size & ((mlz_uint)block_size)-1));
+	MLZ_RET_FALSE(!((mlz_uint)block_size & ((mlz_uint)block_size-1)));
 
 	ins = (mlz_in_stream *)mlz_malloc(sizeof(mlz_in_stream));
 	MLZ_RET_FALSE(ins);
