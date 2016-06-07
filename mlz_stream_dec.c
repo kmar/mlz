@@ -315,6 +315,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 	mlz_byte *target;
 	mlz_uint  block_checksum = 0;
 	mlz_int   in_blocks = 0;
+	mlz_int   in_blocks_threaded = 0;
 
 	stream->current_block = 0;
 	stream->num_blocks    = 0;
@@ -366,6 +367,8 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		stream->unc_blocks[in_blocks]      = uncompressed;
 		stream->block_targets[in_blocks++] = target;
 
+		in_blocks_threaded += (i>0) && !uncompressed;
+
 		MLZ_RET_FALSE(stream->params.read_func(stream->params.handle, target,
 			(mlz_intptr)blk_size) == (mlz_intptr)blk_size);
 
@@ -374,8 +377,9 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 			MLZ_RET_FALSE(stream->params.block_checksum(target, blk_size) == block_checksum);
 	}
 
+	(void)in_blocks_threaded;
 #if defined(MLZ_THREADS)
-	MLZ_RET_FALSE(!stream->params.jobs || mlz_jobs_prepare_batch(stream->params.jobs, in_blocks-1));
+	MLZ_RET_FALSE(!stream->params.jobs || mlz_jobs_prepare_batch(stream->params.jobs, in_blocks_threaded));
 	for (i=1; i<in_blocks; i++) {
 		mlz_job job;
 		if (stream->unc_blocks[i])
