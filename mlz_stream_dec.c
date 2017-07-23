@@ -73,7 +73,23 @@ mlz_adler32(
 	while (size >= 5552) {
 		/* fast path */
 		mlz_uint i;
-		for (i=5552/8; i>0; i--) {
+		for (i=5552/16; i>0; i--) {
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
+			lo += *b++;
+			hi += lo;
 			lo += *b++;
 			hi += lo;
 			lo += *b++;
