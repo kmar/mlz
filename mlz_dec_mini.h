@@ -31,14 +31,24 @@
 #define MLZ_DEC_MINI_H
 
 /* unsafe (=no bounds checks) minimal all-in-one decompression */
-
-#include <string.h>
-
-#if !defined(MLZ_COMMON_H)
+/* define MLZ_DEC_MINI_IMPLEMENTATION to include implementation */
 
 #if !defined(MLZ_API)
 #	define MLZ_API
 #endif
+
+MLZ_API int
+mlz_decompress_mini(
+	void       *dst,
+	const void *src,
+	int         src_size
+);
+
+#if defined(MLZ_DEC_MINI_IMPLEMENTATION)
+
+#include <string.h>
+
+#if !defined(MLZ_COMMON_H)
 
 #if !defined(MLZ_LIKELY)
 #	if defined(__clang__) || defined(__GNUC__)
@@ -131,21 +141,17 @@ typedef int32_t     mlz_int;
 	chlen = (len+7) >> 3; \
 	len &= 7; \
 	dist = -dist; \
-	if (dist <= -8) { \
-		while (chlen-- > 0) { \
-			memcpy(db, db+dist, 8); db += 8; \
-		} \
-	} else { \
-		while (chlen-- > 0) { \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-		} \
+	if (MLZ_UNLIKELY(dist > -8)) { \
+		int i; \
+		for (i=0; i<8; i++) \
+			db[i] = db[i+dist]; \
+		db += 8; \
+		--chlen; \
+		dist = mlz_offset_table[-dist]; \
+	} \
+	while (chlen-- > 0) { \
+		memcpy(db, db+dist, 8); \
+		db += 8; \
 	} \
 	db -= (8-len) & 7;
 
@@ -210,6 +216,7 @@ typedef int32_t     mlz_int;
 	mlz_int chlen; \
 	int bit0, type; \
  \
+	MLZ_CONST mlz_sbyte mlz_offset_table[] = {0, -8, -8, -9, -8, -10, -12, -14}; \
 	MLZ_CONST mlz_byte *sb = (MLZ_CONST mlz_byte *)(src); \
 	MLZ_CONST mlz_byte *se = sb + src_size; \
 	mlz_byte *db = (mlz_byte *)dst; \
@@ -323,5 +330,7 @@ mlz_decompress_mini(
 #	undef MLZ_LIKELY
 #	undef MLZ_UNLIKELY
 #endif
+
+#endif    /* !MLZ_DEC_MINI_IMPLEMENTATION */
 
 #endif

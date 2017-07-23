@@ -30,6 +30,17 @@
 #include "mlz_dec.h"
 #include <string.h>
 
+/*
+a|aaaaaaaa => offset: -8
+ab|abababab => offset: -8
+abc|abcabcab => offset: -9
+abcd|abcdabcd => offset: -8
+abcde|abcdeabc => offset: -10
+abcdef|abcdefab => offset: -12
+abcdefg|abcdefga => offset: -14
+*/
+static MLZ_CONST mlz_sbyte mlz_offset_table[] = {0, -8, -8, -9, -8, -10, -12, -14};
+
 #define MLZ_DEC_GUARD_MASK (1u << MLZ_ACCUM_BITS)
 #define MLZ_DEC_0BIT_MASK  ~1u
 #define MLZ_DEC_2BIT_MASK  ~7u
@@ -99,21 +110,17 @@
 	chlen = (len+7) >> 3; \
 	len &= 7; \
 	dist = -dist; \
-	if (dist <= -8) { \
-		while (chlen-- > 0) { \
-			memcpy(db, db+dist, 8); db += 8; \
-		} \
-	} else { \
-		while (chlen-- > 0) { \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-			*db = db[dist]; db++; \
-		} \
+	if (MLZ_UNLIKELY(dist > -8)) { \
+		int i; \
+		for (i=0; i<8; i++) \
+			db[i] = db[i+dist]; \
+		db += 8; \
+		--chlen; \
+		dist = mlz_offset_table[-dist]; \
+	} \
+	while (chlen-- > 0) { \
+		memcpy(db, db+dist, 8); \
+		db += 8; \
 	} \
 	db -= (8-len) & 7;
 
