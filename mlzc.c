@@ -60,6 +60,7 @@ static mlz_bool block_checksum  = MLZ_FALSE;
 static mlz_bool show_ver        = MLZ_FALSE;
 static mlz_bool unsafe          = MLZ_FALSE;
 static mlz_bool raw             = MLZ_FALSE;
+static mlz_bool raw_mem         = MLZ_FALSE;
 static mlz_int  block_size      = 65536;
 #if defined(MLZ_THREADS)
 static mlz_int  num_threads     = 1;
@@ -96,6 +97,8 @@ static int parse_args(int argc, char **argv)
 			unsafe = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--raw") == 0) {
 			raw = MLZ_TRUE;
+		} else if (strcmp(argv[i], "-rm") == 0 || strcmp(argv[i], "--raw-memory") == 0) {
+			raw_mem = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compress") == 0) {
 			compress = MLZ_TRUE;
 		} else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--decompress") == 0) {
@@ -173,6 +176,7 @@ static void help(void)
 	printf("           when using independent blocks, it's recommended\n");
 	printf("           to use block size of 128k or more\n");
 	printf("       -r or --raw       don't use stream header\n");
+	printf("       -rm or --raw-memory raw in memory compression\n");
 }
 
 #if defined(MLZ_THREADS)
@@ -190,6 +194,66 @@ static void destroy_jobs(void)
 	(void)mlz_jobs_destroy(jobs);
 }
 #endif
+
+static int out_of_memory(void)
+{
+	(void)fprintf(stderr, "out of memory\n");
+	return 14;
+}
+
+static int raw_mem_compress(FILE *fin, FILE *fout)
+{
+	size_t insz, outsz, compsz;
+	mlz_byte *inbuf;
+	mlz_byte *outbuf;
+
+	if (!fout)
+		return 0;
+
+	(void)fseek(fin, 0, SEEK_END);
+	insz = (size_t)ftell(fin);
+	(void)fseek(fin, 0, SEEK_SET);
+
+	inbuf = (mlz_byte *)mlz_malloc(insz);
+
+	if (!inbuf)
+		return out_of_memory();
+
+	if (fread(inbuf, insz, 1, fin) != 1) {
+		mlz_free(inbuf);
+		(void)fprintf(stderr, "failed to read input file\n");
+		return 10;
+	}
+
+	outsz = insz + insz/8 + MLZ_CACHELINE_ALIGN;
+	outbuf = (mlz_byte *)mlz_malloc(outsz);
+
+	if (!outbuf) {
+		mlz_free(inbuf);
+		return out_of_memory();
+	}
+
+	compsz = mlz_compress_simple(outbuf, outsz, inbuf, insz, level);
+
+	if (fwrite(outbuf, compsz, 1, fout) != 1) {
+		mlz_free(inbuf);
+		mlz_free(outbuf);
+		(void)fprintf(stderr, "failed to write output file\n");
+		return 7;
+	}
+
+	mlz_free(inbuf);
+	mlz_free(outbuf);
+	return 0;
+}
+
+static int raw_mem_decompress(FILE *fin, FILE *fout)
+{
+	(void)fin;
+	(void)fout;
+	(void)fprintf(stderr, "raw memory decompression not supported (don't know decomp_size)\n");
+	return 13;
+}
 
 static int process(void)
 {
@@ -226,6 +290,15 @@ static int process(void)
 	if (compress) {
 		mlz_out_stream   *outs;
 		mlz_stream_params par  = mlz_default_stream_params;
+
+		if (raw_mem) {
+			int res = raw_mem_compress(fin, fout);
+			MLZ_ASSERT(fout);
+			(void)fclose(fout);
+			(void)fclose(fin);
+			return res;
+		}
+
 		par.handle             = fout;
 		par.independent_blocks = independent;
 		par.block_size         = block_size;
@@ -270,6 +343,15 @@ static int process(void)
 		/* decompress */
 		mlz_in_stream    *ins;
 		mlz_stream_params par  = mlz_default_stream_params;
+
+		if (raw_mem) {
+			int res = raw_mem_decompress(fin, fout);
+			if (fout)
+				(void)fclose(fout);
+			(void)fclose(fin);
+			return res;
+		}
+
 		par.handle             = fin;
 		par.independent_blocks = independent;
 		par.block_size         = block_size;
