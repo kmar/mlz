@@ -40,6 +40,7 @@
 #include "mlz_stream_enc.h"
 #include "mlz_stream_dec.h"
 #include "mlz_enc.h"
+#include "mlz_dec.h"
 #include "mlz_version.h"
 #include "mlz_thread.h"
 #include <stdio.h>
@@ -201,11 +202,27 @@ static int out_of_memory(void)
 	return 14;
 }
 
+static void store_little_dword(mlz_byte *buf, size_t value)
+{
+	buf[0] = (mlz_byte)(value & 255);
+	buf[1] = (mlz_byte)((value >> 8) & 255);
+	buf[2] = (mlz_byte)((value >> 16) & 255);
+	buf[3] = (mlz_byte)((value >> 24) & 255);
+}
+
+static size_t read_little_dword(MLZ_CONST mlz_byte *buf)
+{
+	return
+		(size_t)buf[0] | ((size_t)buf[1] << 8) |
+		((size_t)buf[2] << 16) | ((size_t)buf[3] << 24);
+}
+
 static int raw_mem_compress(FILE *fin, FILE *fout)
 {
 	size_t insz, outsz, compsz;
 	mlz_byte *inbuf;
 	mlz_byte *outbuf;
+	mlz_uint checksum;
 
 	if (!fout)
 		return 0;
@@ -225,7 +242,7 @@ static int raw_mem_compress(FILE *fin, FILE *fout)
 		return 10;
 	}
 
-	outsz = insz + insz/8 + MLZ_CACHELINE_ALIGN;
+	outsz = insz + insz/8 + MLZ_CACHELINE_ALIGN + 3*4 + 1;
 	outbuf = (mlz_byte *)mlz_malloc(outsz);
 
 	if (!outbuf) {
@@ -233,9 +250,16 @@ static int raw_mem_compress(FILE *fin, FILE *fout)
 		return out_of_memory();
 	}
 
-	compsz = mlz_compress_simple(outbuf, outsz, inbuf, insz, level);
+	checksum = mlz_adler32_simple(inbuf, insz);
 
-	if (fwrite(outbuf, compsz, 1, fout) != 1) {
+	store_little_dword(outbuf, insz);
+	store_little_dword(outbuf+4, checksum);
+
+	compsz = mlz_compress_simple(outbuf+3*4, outsz-3*4, inbuf, insz, level);
+
+	store_little_dword(outbuf+2*4, compsz);
+
+	if (fwrite(outbuf, compsz+3*4, 1, fout) != 1) {
 		mlz_free(inbuf);
 		mlz_free(outbuf);
 		(void)fprintf(stderr, "failed to write output file\n");
@@ -249,10 +273,61 @@ static int raw_mem_compress(FILE *fin, FILE *fout)
 
 static int raw_mem_decompress(FILE *fin, FILE *fout)
 {
-	(void)fin;
-	(void)fout;
-	(void)fprintf(stderr, "raw memory decompression not supported (don't know decomp_size)\n");
-	return 13;
+	size_t insz, outsz, compsz, filechecksum;
+	mlz_byte *inbuf;
+	mlz_byte *outbuf;
+	mlz_uint checksum;
+
+	(void)fseek(fin, 0, SEEK_END);
+	insz = (size_t)ftell(fin);
+	(void)fseek(fin, 0, SEEK_SET);
+
+	inbuf = (mlz_byte *)mlz_malloc(insz);
+
+	if (!inbuf)
+		return out_of_memory();
+
+	if (fread(inbuf, insz, 1, fin) != 1 || insz < 3*4) {
+		mlz_free(inbuf);
+		(void)fprintf(stderr, "failed to read input file\n");
+		return 10;
+	}
+
+	outsz = read_little_dword(inbuf);
+	filechecksum = read_little_dword(inbuf + 4);
+	compsz = read_little_dword(inbuf + 2*4);
+
+	outbuf = (mlz_byte *)mlz_malloc(outsz);
+
+	if (!outbuf) {
+		mlz_free(inbuf);
+		return out_of_memory();
+	}
+
+	if (mlz_decompress_simple(outbuf, outsz, inbuf + 3*4, compsz) != outsz) {
+		mlz_free(inbuf);
+		mlz_free(outbuf);
+		(void)fprintf(stderr, "failed to decompress input file\n");
+		return 10;
+	}
+
+	checksum = mlz_adler32_simple(outbuf, outsz);
+
+	if (filechecksum != checksum) {
+		(void)fprintf(stderr, "checksum error\n");
+		return 10;
+	}
+
+	if (fout && fwrite(outbuf, outsz, 1, fout) != 1) {
+		mlz_free(inbuf);
+		mlz_free(outbuf);
+		(void)fprintf(stderr, "failed to write output file\n");
+		return 7;
+	}
+
+	mlz_free(inbuf);
+	mlz_free(outbuf);
+	return 0;
 }
 
 static int process(void)

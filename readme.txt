@@ -66,4 +66,12 @@ newly added experimental level 11 uses naive SLOW nearly-optimal parsing
 (up to 3 orders of magnitude slower for some files, so max level is kept at 10)
 gains are typically in the range of 1 to 3%, so not much
 
+new compression mode for command line tool: -rm (raw in-memory compression)
+useful for embedding compressed data
+format:
+	LE32 uncompressed_size
+	LE32 adler32
+	LE32 compressed_size
+	... compressed_data ...
+
 have fun
