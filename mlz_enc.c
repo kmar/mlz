@@ -58,14 +58,41 @@ MLZ_INLINE void mlz_free_wrapper(void *ptr)
 void *(*mlz_malloc)(size_t) = mlz_malloc_wrapper;
 void (*mlz_free)(void *)    = mlz_free_wrapper;
 
+/* experimental naive, SLOW optimal parsing */
+typedef struct
+{
+	mlz_int cost;
+	mlz_int dist;
+	mlz_int len;
+	mlz_int lcost;
+} mlz_optimal;
+
 /* simple hash-list (or hash-chain)                  */
 /* note that this helper structure uses 137kB of RAM */
 struct mlz_matcher
 {
 	mlz_ushort hash[MLZ_HASH_SIZE];
 	mlz_ushort list[MLZ_HASH_LIST_SIZE];
+	mlz_optimal *optimal;
+	size_t     optimal_size;
 	mlz_byte   pad [MLZ_CACHELINE_ALIGN];
 };
+
+mlz_bool mlz_matcher_alloc_opt(struct mlz_matcher *matcher, size_t size)
+{
+	MLZ_ASSERT(matcher);
+
+	if (matcher->optimal_size >= size)
+		return MLZ_TRUE;
+
+	if (matcher->optimal)
+		mlz_free(matcher->optimal);
+
+	matcher->optimal = (mlz_optimal *)mlz_malloc(size*sizeof(mlz_optimal));
+	matcher->optimal_size = matcher->optimal ? size : 0;
+
+	return matcher->optimal != MLZ_NULL;
+}
 
 mlz_bool mlz_matcher_init(struct mlz_matcher **matcher)
 {
@@ -73,6 +100,12 @@ mlz_bool mlz_matcher_init(struct mlz_matcher **matcher)
 		return MLZ_FALSE;
 
 	*matcher = (struct mlz_matcher *)mlz_malloc(sizeof(struct mlz_matcher));
+
+	if (*matcher) {
+		(*matcher)->optimal = MLZ_NULL;
+		(*matcher)->optimal_size = 0;
+	}
+
 	return *matcher != MLZ_NULL;
 }
 
@@ -86,8 +119,12 @@ static mlz_bool mlz_matcher_clear(struct mlz_matcher *matcher)
 
 mlz_bool mlz_matcher_free(struct mlz_matcher *matcher)
 {
-	if (matcher)
+	if (matcher) {
+		if (matcher->optimal)
+			mlz_free(matcher->optimal);
+
 		mlz_free(matcher);
+	}
 
 	return matcher ? MLZ_TRUE : MLZ_FALSE;
 }
@@ -128,6 +165,27 @@ MLZ_INLINE mlz_bool mlz_add_bit(mlz_accumulator *accum, mlz_byte **db, MLZ_CONST
 		return MLZ_TRUE;
 
 	return mlz_flush_accum(accum, db, de);
+}
+
+/* for optimal parsing */
+MLZ_INLINE mlz_int mlz_compute_cost(mlz_int dist, mlz_int len)
+{
+	mlz_bool tiny_len;
+	if (!dist)
+		return 9;
+	if (len < MLZ_MIN_MATCH)
+		return 9*len;
+	/* compute cost now */
+	tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << MLZ_SHORT_LEN_BITS);
+	if (tiny_len && dist < 256)
+		return 3 + MLZ_SHORT_LEN_BITS + 8;
+	if (tiny_len && (dist < (1 << 13)))
+		return 3 + 16;
+	if (tiny_len)
+		return 3 + MLZ_SHORT_LEN_BITS + 16;
+	if (len <= MLZ_MIN_MATCH)
+		return 9*len;
+	return 3 + 8 + 16*(len >= 255) + 16;
 }
 
 /* for max compression mode */
@@ -433,6 +491,17 @@ MLZ_INLINE mlz_uint mlz_compute_hash(mlz_uint hash_data)
 }
 
 size_t
+mlz_compress_optimal(
+	struct mlz_matcher *matcher,
+	void               *dst,
+	size_t              dst_size,
+	MLZ_CONST void     *src,
+	size_t              src_size,
+	size_t              bytes_before_src,
+	int                 level
+);
+
+size_t
 mlz_compress(
 	struct mlz_matcher *matcher,
 	void               *dst,
@@ -458,6 +527,9 @@ mlz_compress(
 	MLZ_CONST mlz_byte *de = db + dst_size;
 	MLZ_CONST mlz_byte *lit_start = sb;
 	MLZ_CONST mlz_byte *tmp = osb;
+
+	if (level >= MLZ_LEVEL_OPTIMAL)
+		return mlz_compress_optimal(matcher, dst, dst_size, src, src_size, bytes_before_src, level);
 
 	MLZ_RET_FALSE(mlz_matcher_clear(matcher) && dst && src);
 
@@ -583,8 +655,6 @@ mlz_compress(
 		lit_start = sb;
 	}
 
-#undef MLZ_HASHBYTE
-
 	/* flush last lit chunk */
 	if (lit_start < sb && !mlz_output_match(&accum, lit_start, sb, &db, de, 0, 0))
 		return 0;
@@ -616,6 +686,204 @@ mlz_compress_simple(
 
 	(void)mlz_matcher_free(m);
 	return res;
+}
+
+/* very slow naive optimal parsing; uses extra 16*src_size bytes */
+/* up to 3 orders of magnitude slower!! */
+size_t
+mlz_compress_optimal(
+	struct mlz_matcher *matcher,
+	void               *dst,
+	size_t              dst_size,
+	MLZ_CONST void     *src,
+	size_t              src_size,
+	size_t              bytes_before_src,
+	int                 level
+)
+{
+	mlz_accumulator accum;
+	mlz_uint hdata, hash;
+	mlz_int  loops;
+
+	mlz_optimal *opt, *optimal;
+
+	MLZ_CONST mlz_byte *sb = (MLZ_CONST mlz_byte *)src;
+	MLZ_CONST mlz_byte *osb = sb - bytes_before_src;
+	MLZ_CONST mlz_byte *se = sb + src_size;
+	/* we need a reserve for faster decompression so that we can round match length up to 8-bytes */
+	MLZ_CONST mlz_byte *se_match = se - MLZ_LAST_LITERALS;
+	MLZ_CONST mlz_byte *match_start_max = se - MLZ_MIN_MATCH;
+	mlz_byte *db = (mlz_byte *)dst;
+	MLZ_CONST mlz_byte *odb = db;
+	MLZ_CONST mlz_byte *de = db + dst_size;
+	MLZ_CONST mlz_byte *lit_start = sb;
+	MLZ_CONST mlz_byte *tmp = osb;
+
+	/* out of memory for optimal parse temp buffer? */
+	MLZ_RET_FALSE(mlz_matcher_alloc_opt(matcher, src_size));
+
+	opt = optimal = matcher->optimal;
+
+	MLZ_RET_FALSE(mlz_matcher_clear(matcher) && dst && src);
+
+	/* cannot handle blocks larger than 2G - 64k - 1 */
+	MLZ_RET_FALSE(se - osb < INT_MAX);
+
+	level = mlz_clamp(level, 1, 10);
+	loops = 1 << level;
+
+	accum.bits  = 0;
+	accum.count = 0;
+
+	MLZ_RET_FALSE(db + MLZ_ACCUM_BYTES <= de);
+	accum.ptr = db;
+	db       += MLZ_ACCUM_BYTES;
+
+	memset(accum.ptr, 0, MLZ_ACCUM_BYTES);
+
+	while (tmp < sb) {
+		MLZ_HASHBYTE(tmp);
+		mlz_match_hash_next_byte(matcher, hash, (size_t)(tmp - osb));
+		tmp++;
+	}
+
+	while (sb < se) {
+		mlz_int best_dist;
+		mlz_int best_savings = -1;
+		mlz_int best_len = 0;
+		mlz_int max_dist = mlz_min(MLZ_MAX_DIST,  (mlz_int)(sb - osb));
+		mlz_int max_len  = mlz_min(MLZ_MAX_MATCH, (mlz_int)(se_match - sb));
+
+		/* compute hash at sb */
+		MLZ_HASHBYTE(sb);
+
+		if (!max_dist || max_len < MLZ_MIN_MATCH || sb >= se_match) {
+			opt->len  = 1;
+			opt->cost = 0;
+			opt->lcost = mlz_compute_cost(0, 1);
+			opt->dist = 0;
+			opt++;
+			mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
+			sb++;
+			continue;
+		}
+
+		/* try to find a match now */
+		best_dist = sb > match_start_max ? 0 :
+			mlz_match(matcher, (mlz_int)(sb - osb), hash, osb, max_dist, max_len, &best_len,
+			&best_savings, loops);
+
+		if (!best_dist || best_len < MLZ_MIN_MATCH) {
+			opt->len  = 1;
+			opt->cost = 0;
+			opt->lcost = mlz_compute_cost(0, 1);
+			opt->dist = 0;
+			opt++;
+			mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
+			sb++;
+			continue;
+		}
+
+		/* this optimization is intended for skipping long runs of the same byte */
+		if (opt > optimal && opt[-1].dist && best_dist == opt[-1].dist && best_len+1 == opt[-1].len && sb[-1] == sb[0] && sb-2 >= osb && sb[-2] == sb[0]) {
+			/* skip chain... */
+			while (best_len > 0) {
+				opt->len  = best_len;
+				opt->cost = 0;
+				opt->lcost = mlz_compute_cost(best_dist, best_len);
+				if (best_len < MLZ_MIN_MATCH) {
+					opt->dist = 0;
+					opt->len = 1;
+					opt->lcost = mlz_compute_cost(opt->dist, opt->len);
+				} else {
+					opt->dist = best_dist;
+				}
+				opt++;
+
+				best_len--;
+
+				MLZ_HASHBYTE(sb);
+				mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
+				sb++;
+			}
+			continue;
+		}
+
+		opt->len  = best_len;
+		opt->cost = 0;
+		opt->lcost = mlz_compute_cost(best_dist, best_len);
+		opt->dist = best_dist;
+		opt++;
+
+		MLZ_ASSERT(sb - best_dist >= osb);
+
+		mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
+		sb++;
+	}
+
+#undef MLZ_HASHBYTE
+
+	{
+		/* optimal parse backward pass */
+		mlz_int i;
+		mlz_int size = (mlz_int)(opt - optimal);
+		for (i=size-1; i>=0; i--) {
+			mlz_optimal *o = optimal + i;
+			/* okay, so now: compute cost... */
+			if (i == size-1)
+				o->cost = o->lcost;
+			else {
+				mlz_int j;
+				o->cost = o->lcost + (o+o->len >= opt ? 0 : o[o->len].cost);
+				/* we can do better: virtually try to reduce match len!!! */
+				for (j=MLZ_MIN_MATCH; j<o->len; j++) {
+					mlz_int tmp = mlz_compute_cost(o->dist, j);
+					mlz_int ncost = tmp + (o+j >= opt ? 0 : o[j].cost);
+					if (ncost < o->cost) {
+						o->lcost = tmp;
+						o->cost = ncost;
+						o->len = j;
+					}
+				}
+				{
+					mlz_int tmp = 9;
+					mlz_int ncost = tmp + (o+1 >= opt ? 0 : o[1].cost);
+					if (ncost < o->cost) {
+						o->lcost = tmp;
+						o->cost = ncost;
+						o->len  = 0;
+						o->dist = 0;
+					}
+				}
+			}
+		}
+
+		/* okay, fwd-flush literals */
+		sb = (MLZ_CONST mlz_byte *)src;
+		lit_start = sb;
+		for (i=0; i<size; i++) {
+			if (!optimal[i].dist) {
+				sb++;
+				continue;
+			}
+			MLZ_RET_FALSE(mlz_output_match(&accum, lit_start, sb, &db, de, optimal[i].dist, optimal[i].len));
+			sb += optimal[i].len;
+			i  += optimal[i].len-1;
+			lit_start = sb;
+		}
+	}
+
+	/* flush last lit chunk */
+	if (lit_start < sb && !mlz_output_match(&accum, lit_start, sb, &db, de, 0, 0))
+		return 0;
+
+	MLZ_RET_FALSE(mlz_flush_accum(&accum, &db, de));
+
+	if (accum.ptr == db-MLZ_ACCUM_BYTES && accum.count == 0)
+		/* don't waste extra space */
+		db -= MLZ_ACCUM_BYTES;
+
+	return (size_t)(db - odb);
 }
 
 #undef MLZ_MATCH_BEST_COMMON

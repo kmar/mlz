@@ -45,7 +45,9 @@ struct mlz_matcher;
 typedef enum {
 	MLZ_LEVEL_FASTEST = 1,
 	MLZ_LEVEL_MEDIUM  = 5,
-	MLZ_LEVEL_MAX     = 10
+	MLZ_LEVEL_MAX     = 10,
+	/* experimental SLOW optimal parsing */
+	MLZ_LEVEL_OPTIMAL = 11
 } mlz_compression_level;
 
 /* initialize matcher */

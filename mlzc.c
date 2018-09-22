@@ -85,7 +85,7 @@ static int parse_args(int argc, char **argv)
 		/* assume arg */
 		if (argv[i][1] >= '0' && argv[i][1] <= '9') {
 			long alevel = strtol(argv[i]+1, MLZ_NULL, 10);
-			level = alevel < 1 ? 1 : (alevel > MLZ_LEVEL_MAX ? MLZ_LEVEL_MAX : (mlz_int)alevel);
+			level = alevel < 1 ? 1 : (alevel > MLZ_LEVEL_OPTIMAL ? MLZ_LEVEL_OPTIMAL : (mlz_int)alevel);
 		} else if (strcmp(argv[i], "--best") == 0 || strcmp(argv[i], "--max") == 0) {
 			level = MLZ_LEVEL_MAX;
 		} else if (strcmp(argv[i], "--fastest") == 0) {
@@ -159,6 +159,7 @@ static void help(void)
 	printf("       -1 to -10         select compression level\n");
 	printf("       --best or --max   maximum compression (default)\n");
 	printf("       --fastest         fastest compression (hurts ratio a lot)\n");
+	printf("       -11               very slow near-optimal parsing\n");
 	printf("       -f or --force     force to overwrite outfile\n");
 	printf("       -t or --test      test compressed infile\n");
 	printf("       -b or --block <n> set block size in kb, default is 64\n");

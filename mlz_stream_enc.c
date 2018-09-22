@@ -115,7 +115,7 @@ out_stream_error:
 	outs->out_buffer   = buf + context_size + params->block_size*num_threads;
 	outs->checksum     = params->initial_checksum;
 	outs->ptr          = 0;
-	outs->level        = level < 1 ? 1 : (level > MLZ_LEVEL_MAX ? MLZ_LEVEL_MAX : level);
+	outs->level        = level < 1 ? 1 : (level > MLZ_LEVEL_OPTIMAL ? MLZ_LEVEL_OPTIMAL : level);
 	outs->num_threads  = num_threads;
 	outs->first_block  = MLZ_TRUE;
 	outs->params       = *params;
