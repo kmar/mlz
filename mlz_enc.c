@@ -493,7 +493,7 @@ mlz_compress(
 
 	level = mlz_clamp(level, 0, 10);
 	loops = INT_MAX;
-	if (level < 9)
+	if (level <= 9)
 		loops = 1 << level;
 
 	accum.bits  = 0;
