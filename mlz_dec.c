@@ -62,7 +62,7 @@ static MLZ_CONST mlz_sbyte mlz_offset_table[] = {0, -8, -8, -9, -8, -10, -12, -1
 
 #define MLZ_GET_BIT_CHECK(res, stmt) \
 	MLZ_GET_BIT_FAST_NOACCUM(res) \
-	if (MLZ_UNLIKELY(accum <= 1)) { \
+	if (accum <= 1) { \
 		stmt \
 		MLZ_LOAD_ACCUM() \
 	}
@@ -75,7 +75,7 @@ static MLZ_CONST mlz_sbyte mlz_offset_table[] = {0, -8, -8, -9, -8, -10, -12, -1
 	accum >>= 2;
 
 #define MLZ_GET_TYPE_COMMON(res, getbit) \
-	if (MLZ_LIKELY(accum & MLZ_DEC_2BIT_MASK)) { \
+	if (accum & MLZ_DEC_2BIT_MASK) { \
 		MLZ_GET_TYPE_FAST_NOACCUM(res) \
 	} else { \
 		int tmp; \
@@ -92,7 +92,7 @@ static MLZ_CONST mlz_sbyte mlz_offset_table[] = {0, -8, -8, -9, -8, -10, -12, -1
 	accum >>= 3;
 
 #define MLZ_GET_SHORT_LEN_COMMON(res, getbit) \
-	if (MLZ_LIKELY(accum & MLZ_DEC_3BIT_MASK)) { \
+	if (accum & MLZ_DEC_3BIT_MASK) { \
 		MLZ_GET_SHORT_LEN_FAST_NOACCUM(res) \
 	} else { \
 		int tmp; \
@@ -110,7 +110,7 @@ static MLZ_CONST mlz_sbyte mlz_offset_table[] = {0, -8, -8, -9, -8, -10, -12, -1
 	chlen = (len+7) >> 3; \
 	len &= 7; \
 	dist = -dist; \
-	if (MLZ_UNLIKELY(dist > -8)) { \
+	if (dist > -8) { \
 		int i; \
 		for (i=0; i<8; i++) \
 			db[i] = db[i+dist]; \

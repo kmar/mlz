@@ -60,16 +60,6 @@
 #	endif
 #endif
 
-#if !defined(MLZ_LIKELY)
-#	if defined(__clang__) || defined(__GNUC__)
-#		define MLZ_LIKELY(x)   __builtin_expect(!!(x), 1)
-#		define MLZ_UNLIKELY(x) __builtin_expect(!!(x), 0)
-#	else
-#		define MLZ_LIKELY(x) x
-#		define MLZ_UNLIKELY(x) x
-#	endif
-#endif
-
 /* types */
 
 #include <stddef.h>

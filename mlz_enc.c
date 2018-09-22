@@ -161,7 +161,7 @@ static mlz_bool mlz_flush_accum(mlz_accumulator *accum, mlz_byte **db, MLZ_CONST
 MLZ_INLINE mlz_bool mlz_add_bit(mlz_accumulator *accum, mlz_byte **db, MLZ_CONST mlz_byte *de, int bit)
 {
 	accum->bits |= (mlz_uint)bit << accum->count;
-	if (MLZ_LIKELY(++accum->count < MLZ_ACCUM_BITS))
+	if (++accum->count < MLZ_ACCUM_BITS)
 		return MLZ_TRUE;
 
 	return mlz_flush_accum(accum, db, de);

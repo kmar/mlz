@@ -50,16 +50,6 @@ mlz_decompress_mini(
 
 #if !defined(MLZ_COMMON_H)
 
-#if !defined(MLZ_LIKELY)
-#	if defined(__clang__) || defined(__GNUC__)
-#		define MLZ_LIKELY(x)   __builtin_expect(!!(x), 1)
-#		define MLZ_UNLIKELY(x) __builtin_expect(!!(x), 0)
-#	else
-#		define MLZ_LIKELY(x) x
-#		define MLZ_UNLIKELY(x) x
-#	endif
-#endif
-
 #if (defined(_MSC_VER) && _MSC_VER < 1900) || defined(__BORLANDC__)
 typedef unsigned __int8  mlz_byte;
 typedef unsigned __int32 mlz_uint;
@@ -103,7 +93,7 @@ typedef int32_t     mlz_int;
 
 #define MLZ_GET_BIT_FAST(res) \
 	MLZ_GET_BIT_FAST_NOACCUM(res) \
-	if (MLZ_UNLIKELY(accum <= 1)) { \
+	if (accum <= 1) { \
 		MLZ_LOAD_ACCUM() \
 	}
 
@@ -112,7 +102,7 @@ typedef int32_t     mlz_int;
 	accum >>= 2;
 
 #define MLZ_GET_TYPE_FAST(res) \
-	if (MLZ_LIKELY(accum & MLZ_DEC_2BIT_MASK)) { \
+	if (accum & MLZ_DEC_2BIT_MASK) { \
 		MLZ_GET_TYPE_FAST_NOACCUM(res) \
 	} else { \
 		int tmp; \
@@ -126,7 +116,7 @@ typedef int32_t     mlz_int;
 	accum >>= 3;
 
 #define MLZ_GET_SHORT_LEN_FAST(res) \
-	if (MLZ_LIKELY(accum & MLZ_DEC_3BIT_MASK)) { \
+	if (accum & MLZ_DEC_3BIT_MASK) { \
 		MLZ_GET_SHORT_LEN_FAST_NOACCUM(res) \
 	} else { \
 		int tmp; \
@@ -141,7 +131,7 @@ typedef int32_t     mlz_int;
 	chlen = (len+7) >> 3; \
 	len &= 7; \
 	dist = -dist; \
-	if (MLZ_UNLIKELY(dist > -8)) { \
+	if (dist > -8) { \
 		int i; \
 		for (i=0; i<8; i++) \
 			db[i] = db[i+dist]; \
@@ -327,8 +317,6 @@ mlz_decompress_mini(
 #	undef MLZ_ACCUM_BYTES
 #	undef MLZ_MIN_LIT_RUN
 #	undef MLZ_CONST
-#	undef MLZ_LIKELY
-#	undef MLZ_UNLIKELY
 #endif
 
 #endif    /* !MLZ_DEC_MINI_IMPLEMENTATION */

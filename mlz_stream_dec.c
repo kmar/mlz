@@ -446,7 +446,7 @@ mlz_in_stream_read_block(mlz_in_stream *stream)
 		mlz_uint next_blk_size;
 		MLZ_RET_FALSE(mlz_read_little_endian(stream, &next_blk_size));
 		stream->next_block_size = next_blk_size;
-		if (MLZ_UNLIKELY(!next_blk_size))
+		if (!next_blk_size)
 			blk_size = 0;
 	}
 
@@ -479,7 +479,7 @@ mlz_stream_read(
 	while (size > 0) {
 		mlz_intptr to_fill, capacity;
 
-		if (MLZ_UNLIKELY(stream->ptr >= stream->top)) {
+		if (stream->ptr >= stream->top) {
 			if (++stream->current_block < stream->num_blocks) {
 				/* jump to next block */
 				stream->ptr = stream->buffer + stream->context_size +
