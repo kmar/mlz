@@ -85,7 +85,7 @@ enum mlz_stream_constants
 	MLZ_MIN_BLOCK_SIZE          = 1 << 10,
 	MLZ_MAX_BLOCK_SIZE          = 1 << 29,
 	MLZ_UNCOMPRESSED_BLOCK_MASK = 1 << 30,
-	MLZ_PARTIAL_BLOCK_MASK      = 1 << 31,
+	MLZ_PARTIAL_BLOCK_MASK      = (int)(1u << 31),
 	MLZ_BLOCK_LEN_MASK          = MLZ_UNCOMPRESSED_BLOCK_MASK-1,
 	/* to support dependent-block streaming */
 	MLZ_BLOCK_CONTEXT_SIZE      = MLZ_MAX_DIST+1,
