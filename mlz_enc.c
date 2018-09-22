@@ -837,19 +837,19 @@ mlz_compress_optimal(
 				o->cost = o->lcost + (o+o->len >= opt ? 0 : o[o->len].cost);
 				/* we can do better: virtually try to reduce match len!!! */
 				for (j=MLZ_MIN_MATCH; j<o->len; j++) {
-					mlz_int tmp = mlz_compute_cost(o->dist, j);
-					mlz_int ncost = tmp + (o+j >= opt ? 0 : o[j].cost);
+					mlz_int tmpcost = mlz_compute_cost(o->dist, j);
+					mlz_int ncost = tmpcost + (o+j >= opt ? 0 : o[j].cost);
 					if (ncost < o->cost) {
-						o->lcost = tmp;
+						o->lcost = tmpcost;
 						o->cost = ncost;
 						o->len = j;
 					}
 				}
 				{
-					mlz_int tmp = 9;
-					mlz_int ncost = tmp + (o+1 >= opt ? 0 : o[1].cost);
+					mlz_int tmpcost = 9;
+					mlz_int ncost = tmpcost + (o+1 >= opt ? 0 : o[1].cost);
 					if (ncost < o->cost) {
-						o->lcost = tmp;
+						o->lcost = tmpcost;
 						o->cost = ncost;
 						o->len  = 0;
 						o->dist = 0;
