@@ -1,5 +1,5 @@
-mini-LZ library (mlz) v0.2g
-(c) Martin Sedlak 2016
+mini-LZ library (mlz) v0.2h
+(c) Martin Sedlak 2016-2018
 
 a simple, portable LZ-only codec written in plain C
 distributed under Boost software license
@@ -46,7 +46,7 @@ returns 0 on failure or size of compressed block
 
 mlz_decompress_simple(
 	destination_buffer,
-	destionation_buffer_size, /* = limit */
+	destination_buffer_size, /* = limit */
 	source_buffer,
 	source_buffer_size
 )
@@ -61,5 +61,9 @@ algorithm: plain lz77 with deep lazy matching
 (long literal runs and extremely well compressed data)
 matcher is simple hash-list (hash-chain)
 data format is described in source files (using 24-bit bit accumulator)
+
+newly added experimental level 11 uses naive SLOW nearly-optimal parsing
+(up to 3 orders of magnitude slower for some files, so max level is kept at 10)
+gains are typically in the range of 1 to 3%, so not much
 
 have fun

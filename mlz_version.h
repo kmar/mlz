@@ -1,6 +1,6 @@
 /*
    mini-LZ library (mlz)
-   (c) Martin Sedlak 2016
+   (c) Martin Sedlak 2016-2018
 
    Boost Software License - Version 1.0 - August 17th, 2003
 
@@ -28,5 +28,5 @@
 */
 
 #ifndef MLZ_VERSION
-#	define MLZ_VERSION "0.2g"
+#	define MLZ_VERSION "0.2h"
 #endif
