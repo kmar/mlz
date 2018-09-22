@@ -110,7 +110,11 @@ mlz_thread mlz_thread_create(void)
 
 /* FIXME: in 64-bit mode, clang warns about __stdcall (ignored attribute) */
 /* unfortunately using CALLBACK won't help here either                    */
+#if defined(__BORLANDC__)
+static DWORD WINAPI mlz_win_thread_proc(LPVOID param)
+#else
 static unsigned __stdcall mlz_win_thread_proc(void *param)
+#endif
 {
 	mlz_thread thread = (mlz_thread)param;
 	thread->proc(thread->param);
@@ -127,7 +131,11 @@ mlz_bool mlz_thread_run(
 	MLZ_RET_FALSE(thread && !thread->handle && proc);
 	thread->proc   = proc;
 	thread->param  = param;
+#if defined(__BORLANDC__)
+	handle = (uintptr_t)CreateThread(MLZ_NULL, 0, mlz_win_thread_proc, thread, 0, MLZ_NULL);
+#else
 	handle = _beginthreadex(MLZ_NULL, 0, mlz_win_thread_proc, thread, 0, MLZ_NULL);
+#endif
 	MLZ_RET_FALSE(handle);
 	thread->handle = (void *)handle;
 	return MLZ_TRUE;
