@@ -35,8 +35,8 @@
 enum mlz_match_constants
 {
 	/* because we don't clear hash list, setting this too high will actually slow things down */
-	/* value of 2048 entries works best for Silesia corpus, YMMV                              */
-	MLZ_HASH_SIZE      = 2048,
+	/* 4096 seems like a best tradeoff between compression speed and quality for "fast" modes */
+	MLZ_HASH_SIZE      = 4096,
 	MLZ_HASH_LIST_SIZE = 65536,
 	MLZ_DICT_MASK      = MLZ_HASH_LIST_SIZE-1,
 	MLZ_HASH_MASK      = MLZ_HASH_SIZE-1,
@@ -59,7 +59,7 @@ void *(*mlz_malloc)(size_t) = mlz_malloc_wrapper;
 void (*mlz_free)(void *)    = mlz_free_wrapper;
 
 /* simple hash-list (or hash-chain)                  */
-/* note that this helper structure uses 133kB of RAM */
+/* note that this helper structure uses 137kB of RAM */
 struct mlz_matcher
 {
 	mlz_ushort hash[MLZ_HASH_SIZE];
@@ -79,7 +79,8 @@ mlz_bool mlz_matcher_init(struct mlz_matcher **matcher)
 static mlz_bool mlz_matcher_clear(struct mlz_matcher *matcher)
 {
 	MLZ_RET_FALSE(matcher != MLZ_NULL);
-	memset(matcher, 0, sizeof(struct mlz_matcher));
+	memset(matcher->hash, 0, sizeof(matcher->hash));
+	matcher->list[0] = 0;
 	return MLZ_TRUE;
 }
 
