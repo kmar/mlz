@@ -43,7 +43,7 @@ struct mlz_matcher;
 
 /* compression level constants */
 typedef enum {
-	MLZ_LEVEL_FASTEST = 0,
+	MLZ_LEVEL_FASTEST = 1,
 	MLZ_LEVEL_MEDIUM  = 5,
 	MLZ_LEVEL_MAX     = 10
 } mlz_compression_level;

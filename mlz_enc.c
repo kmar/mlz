@@ -234,6 +234,8 @@ mlz_match_loops_save(
 	MLZ_MATCH(loops-- > 0, MLZ_MATCH_BEST_SAVINGS)
 }
 
+#if 0
+/* keeping this in case it's useful to someone playing around */
 static mlz_int
 mlz_match_loops_nosave(
 	struct mlz_matcher *m,
@@ -248,35 +250,7 @@ mlz_match_loops_nosave(
 {
 	MLZ_MATCH(loops-- > 0, MLZ_MATCH_BEST)
 }
-
-static mlz_int
-mlz_match_save(
-	struct mlz_matcher *m,
-	size_t              pos,
-	mlz_uint            hash,
-	MLZ_CONST mlz_byte *buf,
-	mlz_int             max_dist,
-	mlz_int             max_len,
-	mlz_int *           best_len,
-	mlz_int *           best_save
-)
-{
-	MLZ_MATCH(1, MLZ_MATCH_BEST_SAVINGS)
-}
-
-static mlz_int
-mlz_match_nosave(
-	struct mlz_matcher *m,
-	size_t              pos,
-	mlz_uint            hash,
-	MLZ_CONST mlz_byte *buf,
-	mlz_int             max_dist,
-	mlz_int             max_len,
-	mlz_int *           best_len
-)
-{
-	MLZ_MATCH(1, MLZ_MATCH_BEST)
-}
+#endif
 
 static mlz_int
 mlz_match(
@@ -291,14 +265,12 @@ mlz_match(
 	mlz_int             loops
 )
 {
-	if (loops == INT_MAX) {
-		if (best_save)
-			return mlz_match_save(m, pos, hash, buf, max_dist, max_len, best_len, best_save);
-		return mlz_match_nosave(m, pos, hash, buf, max_dist, max_len, best_len);
-	}
-	if (best_save)
-		return mlz_match_loops_save(m, pos, hash, buf, max_dist, max_len, best_len, best_save, loops);
-	return mlz_match_loops_nosave(m, pos, hash, buf, max_dist, max_len, best_len, loops);
+	mlz_int dummy = -1;
+
+	if (!best_save)
+		best_save = &dummy;
+
+	return mlz_match_loops_save(m, pos, hash, buf, max_dist, max_len, best_len, best_save, loops);
 }
 
 MLZ_INLINE void mlz_match_hash_next_byte(struct mlz_matcher *m, mlz_uint hash, size_t pos)
@@ -492,10 +464,8 @@ mlz_compress(
 	/* cannot handle blocks larger than 2G - 64k - 1 */
 	MLZ_RET_FALSE(se - osb < INT_MAX);
 
-	level = mlz_clamp(level, 0, 10);
-	loops = INT_MAX;
-	if (level <= 9)
-		loops = 1 << level;
+	level = mlz_clamp(level, 1, 10);
+	loops = 1 << level;
 
 	accum.bits  = 0;
 	accum.count = 0;
@@ -537,7 +507,7 @@ mlz_compress(
 		/* try to find a match now */
 		best_dist = sb > match_start_max ? 0 :
 			mlz_match(matcher, (mlz_int)(sb - osb), hash, osb, max_dist, max_len, &best_len,
-				level >= 10 ? &best_savings : MLZ_NULL, loops);
+				&best_savings, loops);
 
 		if (!best_dist || best_len < MLZ_MIN_MATCH) {
 			mlz_match_hash_next_byte(matcher, hash, (size_t)(sb - osb));
@@ -582,7 +552,7 @@ mlz_compress(
 			best_len2 = 0; /*best_len*/;
 			best_dist2 = sb2 > match_start_max ? 0 :
 				mlz_match(matcher, (mlz_int)(sb2 - osb), hash, osb, max_dist2, max_len2, &best_len2,
-					level >=10 ? &best_savings : MLZ_NULL, loops);
+					&best_savings, loops);
 			if (!best_dist2 || best_len2 <= best_len)
 				break;
 
