@@ -51,11 +51,13 @@ mlz_decompress_mini(
 #if !defined(MLZ_COMMON_H)
 
 #if (defined(_MSC_VER) && _MSC_VER < 1900) || defined(__BORLANDC__)
+typedef signed   __int8  mlz_sbyte;
 typedef unsigned __int8  mlz_byte;
 typedef unsigned __int32 mlz_uint;
 typedef signed   __int32 mlz_int;
 #else
 #	include <stdint.h>
+typedef int8_t      mlz_sbyte;
 typedef uint8_t     mlz_byte;
 typedef uint32_t    mlz_uint;
 typedef int32_t     mlz_int;
