@@ -185,7 +185,7 @@ MLZ_INLINE mlz_int mlz_compute_cost(mlz_int dist, mlz_int len)
 		return 3 + MLZ_SHORT_LEN_BITS + 16;
 	if (len <= MLZ_MIN_MATCH)
 		return 9*len;
-	return 3 + 8 + 16*(len >= 255) + 16;
+	return 3 + 8 + 16*((len - MLZ_MIN_MATCH) >= 255) + 16;
 }
 
 /* for max compression mode */
@@ -195,7 +195,7 @@ MLZ_INLINE mlz_int mlz_compute_savings(mlz_int dist, mlz_int len)
 	mlz_bool tiny_len = len >= MLZ_MIN_MATCH && len < MLZ_MIN_MATCH + (1 << MLZ_SHORT_LEN_BITS);
 	/* note: we don't check for tiny_len && dist < (1 << 13)          */
 	/* here because it has no impact due to the way the matcher works */
-	mlz_int  bit_cost = tiny_len ? 3 + MLZ_SHORT_LEN_BITS + 8 + 8*(dist > 255) : 3 + 8 + 16 + 16*(len >= 255);
+	mlz_int  bit_cost = tiny_len ? 3 + MLZ_SHORT_LEN_BITS + 8 + 8*(dist > 255) : 3 + 8 + 16 + 16*((len - MLZ_MIN_MATCH) >= 255);
 
 	return 9*len - bit_cost;
 }
@@ -836,7 +836,8 @@ mlz_compress_optimal(
 				mlz_int j;
 				o->cost = o->lcost + (o+o->len >= opt ? 0 : o[o->len].cost);
 				/* we can do better: virtually try to reduce match len!!! */
-				for (j=MLZ_MIN_MATCH; j<o->len; j++) {
+				/* this performs slightly better than forward iteration, even if literal runs are disabled... */
+				for (j=o->len-1; j>=MLZ_MIN_MATCH; j--) {
 					mlz_int tmpcost = mlz_compute_cost(o->dist, j);
 					mlz_int ncost = tmpcost + (o+j >= opt ? 0 : o[j].cost);
 					if (ncost < o->cost) {
